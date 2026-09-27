@@ -201,6 +201,7 @@ export type Intimacao = {
   recebida: string; // dd/MM às HH:mm
   prazoDias: number;
   lida: boolean;
+  concluida?: boolean;
 };
 
 export type Usuario = {

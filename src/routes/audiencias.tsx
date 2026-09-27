@@ -82,7 +82,7 @@ function AudienciasPage() {
         )}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
         <Panel
           title={`${lista.length} audiência${lista.length === 1 ? "" : "s"}`}
           className="lg:col-span-2"
@@ -171,7 +171,7 @@ function AudienciasPage() {
                   )}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Info icon={Calendar} label="Data">
                     {DIAS_SEMANA[parseISO(atual.data).getDay()]}, {fmtDMY(atual.data)}
                   </Info>
@@ -213,7 +213,7 @@ function AudienciasPage() {
                   <h4 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     Vínculos
                   </h4>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="rounded-xl border border-border p-3">
                       <div className="text-[11px] text-muted-foreground">Processo</div>
                       {processo ? (

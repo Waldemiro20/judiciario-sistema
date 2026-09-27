@@ -78,7 +78,7 @@ function ContratosPage() {
       subtitle="modelos do escritório, geração de documentos e assinatura eletrônica"
     >
       <Tabs value={aba} onValueChange={setAba}>
-        <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
+        <TabsList className="mb-4 w-full max-w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="modelos">Biblioteca de modelos</TabsTrigger>
           <TabsTrigger value="gerar">Gerar documento</TabsTrigger>
           <TabsTrigger value="contratos">Contratos e vencimentos</TabsTrigger>
@@ -111,7 +111,7 @@ function Biblioteca({ onUsar }: { onUsar: (id: string) => void }) {
   const lista = modelos.filter((m) => cat === "Todos" || m.categoria === cat);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
       <input
         ref={input}
         type="file"
@@ -251,7 +251,7 @@ function Gerador({ modeloInicial }: { modeloInicial: string | null }) {
   const texto = modelo.corpo.replace(/\{[A-Z_]+\}/g, (t) => valor(t) || t);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
       <Panel title="Dados" className="self-start lg:col-span-2">
         <div className="space-y-3 p-4">
           <Field label="Modelo">

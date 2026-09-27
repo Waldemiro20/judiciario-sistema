@@ -1,5 +1,16 @@
-import { Pause, Play, Plus, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  ArrowRightLeft,
+  Check,
+  Copy,
+  MoreHorizontal,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -10,6 +21,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, Chip, Field, inputCls, selectCls, type Tone } from "@/components/kit";
@@ -69,6 +100,189 @@ export function useAtualizarTarefa() {
   };
 }
 
+/** Ações comuns de uma tarefa: concluir/reabrir, mover, duplicar e excluir (com desfazer). */
+export function useAcoesTarefa() {
+  const { tarefas, setTarefas, usuario, registrar } = useApp();
+  const atualizar = useAtualizarTarefa();
+
+  const mover = (t: Tarefa, coluna: Coluna) => {
+    if (t.coluna === coluna) return;
+    atualizar(t.id, (x) => ({ ...x, coluna }), `moveu para ${coluna}`);
+  };
+
+  const alternarConclusao = (t: Tarefa) => {
+    const concluir = t.coluna !== "Concluído";
+    atualizar(
+      t.id,
+      (x) => ({ ...x, coluna: concluir ? "Concluído" : "A Fazer" }),
+      concluir ? "concluiu a tarefa" : "reabriu a tarefa",
+    );
+    toast.success(concluir ? "Tarefa concluída" : "Tarefa reaberta");
+  };
+
+  const duplicar = (t: Tarefa) => {
+    const { dataCurta, hora } = agoraCarimbo();
+    const copia: Tarefa = {
+      ...t,
+      id: uid(),
+      titulo: `${t.titulo} (cópia)`,
+      coluna: "A Fazer",
+      subtarefas: t.subtarefas.map((s) => ({ ...s, id: uid(), feita: false })),
+      comentarios: [],
+      apontamentos: [],
+      historico: [
+        {
+          id: uid(),
+          autor: usuario,
+          texto: `duplicou a partir de "${t.titulo}"`,
+          quando: `${dataCurta} às ${hora}`,
+        },
+      ],
+    };
+    setTarefas((prev) => [copia, ...prev]);
+    registrar("Criou", "Tarefas", `Duplicou a tarefa "${t.titulo}"`);
+    toast.success("Tarefa duplicada");
+    return copia.id;
+  };
+
+  const excluir = (t: Tarefa) => {
+    const indice = tarefas.findIndex((x) => x.id === t.id);
+    setTarefas((prev) => prev.filter((x) => x.id !== t.id));
+    registrar("Excluiu", "Tarefas", `Excluiu a tarefa "${t.titulo}"`);
+    toast.success("Tarefa excluída", {
+      action: {
+        label: "Desfazer",
+        onClick: () =>
+          setTarefas((prev) => {
+            if (prev.some((x) => x.id === t.id)) return prev;
+            const copia = [...prev];
+            copia.splice(Math.max(0, indice), 0, t);
+            return copia;
+          }),
+      },
+    });
+  };
+
+  return { mover, alternarConclusao, duplicar, excluir };
+}
+
+/** Confirmação antes de excluir uma tarefa. */
+export function ConfirmarExclusaoTarefa({
+  tarefa,
+  onOpenChange,
+  onExcluida,
+}: {
+  tarefa: Tarefa | null;
+  onOpenChange: (open: boolean) => void;
+  onExcluida?: () => void;
+}) {
+  const { excluir } = useAcoesTarefa();
+  return (
+    <AlertDialog open={!!tarefa} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir tarefa?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {tarefa && (
+              <>
+                A tarefa <strong className="text-foreground">“{tarefa.titulo}”</strong> será
+                removida junto com checklist, comentários e horas apontadas.
+              </>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-[var(--critical)] text-white hover:bg-[var(--critical)]/90"
+            onClick={() => {
+              if (tarefa) excluir(tarefa);
+              onExcluida?.();
+            }}
+          >
+            <Trash2 className="size-4" /> Excluir
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/** Menu "⋯" com todas as ações de uma tarefa. Usado no painel, no quadro e nas listas. */
+export function TarefaMenu({
+  t,
+  onEditar,
+  className,
+  trigger,
+}: {
+  t: Tarefa;
+  onEditar: () => void;
+  className?: string;
+  trigger?: ReactNode;
+}) {
+  const { mover, alternarConclusao, duplicar } = useAcoesTarefa();
+  const [confirmar, setConfirmar] = useState(false);
+  const feita = t.coluna === "Concluído";
+
+  // Os eventos do React atravessam portais: sem isso, cliques no menu ou na confirmação
+  // chegariam ao cartão da tarefa e o abririam.
+  const isolar = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  return (
+    <span className="contents" onClick={isolar} onKeyDown={isolar} onPointerDown={isolar}>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="Ações da tarefa"
+          className={cn(
+            "grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=open]:bg-accent",
+            className,
+          )}
+        >
+          {trigger ?? <MoreHorizontal className="size-4" />}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem className="gap-2" onSelect={onEditar}>
+            <Pencil className="size-4" /> Abrir e editar
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2" onSelect={() => alternarConclusao(t)}>
+            {feita ? <RotateCcw className="size-4" /> : <Check className="size-4" />}
+            {feita ? "Reabrir tarefa" : "Marcar como concluída"}
+          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="gap-2">
+              <ArrowRightLeft className="size-4" /> Mover para
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {COLUNAS.map((c) => (
+                <DropdownMenuItem
+                  key={c}
+                  disabled={c === t.coluna}
+                  onSelect={() => mover(t, c)}
+                  className="gap-2"
+                >
+                  {c}
+                  {c === t.coluna && <Check className="ml-auto size-3.5" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuItem className="gap-2" onSelect={() => duplicar(t)}>
+            <Copy className="size-4" /> Duplicar
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="gap-2 text-[var(--critical)] focus:text-[var(--critical)]"
+            onSelect={() => setConfirmar(true)}
+          >
+            <Trash2 className="size-4" /> Excluir
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ConfirmarExclusaoTarefa tarefa={confirmar ? t : null} onOpenChange={setConfirmar} />
+    </span>
+  );
+}
+
 export function TarefaDialog({
   tarefaId,
   onOpenChange,
@@ -79,6 +293,9 @@ export function TarefaDialog({
   const { tarefas, usuario, processos, clientes, usuarios } = useApp();
   const t = tarefas.find((x) => x.id === tarefaId);
   const atualizar = useAtualizarTarefa();
+  const { alternarConclusao, duplicar } = useAcoesTarefa();
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+  const [editandoSub, setEditandoSub] = useState<string | null>(null);
   const [novaSub, setNovaSub] = useState("");
   const [comentario, setComentario] = useState("");
   const [rodando, setRodando] = useState(false);
@@ -143,7 +360,13 @@ export function TarefaDialog({
 
   return (
     <Dialog open={!!t} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+      <DialogContent
+        className="max-h-[92dvh] max-w-3xl overflow-y-auto"
+        // Em telas de toque, não focar o título ao abrir (evita abrir o teclado sozinho).
+        onOpenAutoFocus={(e) => {
+          if (!window.matchMedia("(pointer: fine)").matches) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <div className="flex flex-wrap items-center gap-2 pr-6">
             <Chip tone={prioridadeTone[t.prioridade]}>{t.prioridade}</Chip>
@@ -153,16 +376,49 @@ export function TarefaDialog({
             </span>
           </div>
           <DialogTitle className="pr-6 text-left">
-            <input
-              value={t.titulo}
-              onChange={(e) => atualizar(t.id, (x) => ({ ...x, titulo: e.target.value }))}
-              className="w-full rounded-md bg-transparent text-lg font-semibold outline-none focus:bg-accent/50"
-            />
+            <span className="group/titulo relative flex items-center">
+              <input
+                value={t.titulo}
+                aria-label="Título da tarefa"
+                onChange={(e) => atualizar(t.id, (x) => ({ ...x, titulo: e.target.value }))}
+                className={cn(
+                  "w-full rounded-md bg-transparent py-1 pl-1 pr-7 text-lg font-semibold outline-none hover:bg-accent/40 focus:bg-accent/50",
+                  t.coluna === "Concluído" && "text-muted-foreground line-through",
+                )}
+              />
+              <Pencil className="pointer-events-none absolute right-2 size-3.5 text-muted-foreground opacity-60 group-focus-within/titulo:opacity-0" />
+            </span>
           </DialogTitle>
           <DialogDescription className="sr-only">Detalhes da tarefa</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant={t.coluna === "Concluído" ? "outline" : "default"}
+            onClick={() => alternarConclusao(t)}
+          >
+            {t.coluna === "Concluído" ? (
+              <RotateCcw className="size-4" />
+            ) : (
+              <Check className="size-4" />
+            )}
+            {t.coluna === "Concluído" ? "Reabrir" : "Concluir"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => duplicar(t)}>
+            <Copy className="size-4" /> Duplicar
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto text-[var(--critical)] hover:bg-[var(--critical-soft)] hover:text-[var(--critical)]"
+            onClick={() => setConfirmarExclusao(true)}
+          >
+            <Trash2 className="size-4" /> Excluir
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Status">
             <select
               className={selectCls}
@@ -328,23 +584,71 @@ export function TarefaDialog({
                     )
                   }
                 />
-                <span
-                  className={cn("flex-1 text-sm", s.feita && "text-muted-foreground line-through")}
-                >
-                  {s.texto}
+                {editandoSub === s.id ? (
+                  <input
+                    autoFocus
+                    aria-label="Editar item"
+                    className={cn(inputCls, "h-8 flex-1")}
+                    defaultValue={s.texto}
+                    onBlur={(e) => {
+                      const texto = e.target.value.trim();
+                      if (texto && texto !== s.texto)
+                        atualizar(
+                          t.id,
+                          (x) => ({
+                            ...x,
+                            subtarefas: x.subtarefas.map((y) =>
+                              y.id === s.id ? { ...y, texto } : y,
+                            ),
+                          }),
+                          `renomeou o item "${s.texto}" para "${texto}"`,
+                        );
+                      setEditandoSub(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setEditandoSub(null);
+                      }
+                    }}
+                  />
+                ) : (
+                  <span
+                    onDoubleClick={() => setEditandoSub(s.id)}
+                    className={cn(
+                      "min-w-0 flex-1 break-words text-sm",
+                      s.feita && "text-muted-foreground line-through",
+                    )}
+                  >
+                    {s.texto}
+                  </span>
+                )}
+                <span className="flex shrink-0 items-center gap-0.5 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                  <button
+                    aria-label="Editar item"
+                    onClick={() => setEditandoSub(s.id)}
+                    className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    aria-label="Remover item"
+                    onClick={() =>
+                      atualizar(
+                        t.id,
+                        (x) => ({
+                          ...x,
+                          subtarefas: x.subtarefas.filter((y) => y.id !== s.id),
+                        }),
+                        `removeu o item "${s.texto}"`,
+                      )
+                    }
+                    className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-[var(--critical-soft)] hover:text-[var(--critical)]"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </span>
-                <button
-                  aria-label="Remover item"
-                  onClick={() =>
-                    atualizar(t.id, (x) => ({
-                      ...x,
-                      subtarefas: x.subtarefas.filter((y) => y.id !== s.id),
-                    }))
-                  }
-                  className="opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
               </div>
             ))}
             <form
@@ -388,7 +692,29 @@ export function TarefaDialog({
                 <div className="min-w-0 flex-1 rounded-xl bg-accent/60 px-3 py-2">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-xs font-semibold">{c.autor}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">{c.quando}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {c.quando}
+                      </span>
+                      {c.autor === usuario && (
+                        <button
+                          aria-label="Excluir comentário"
+                          onClick={() =>
+                            atualizar(
+                              t.id,
+                              (x) => ({
+                                ...x,
+                                comentarios: x.comentarios.filter((y) => y.id !== c.id),
+                              }),
+                              "excluiu um comentário",
+                            )
+                          }
+                          className="text-muted-foreground hover:text-[var(--critical)]"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      )}
+                    </span>
                   </div>
                   <p className="mt-0.5 text-sm">{c.texto}</p>
                 </div>
@@ -496,6 +822,24 @@ export function TarefaDialog({
                   <span className="w-14 text-right font-mono text-xs font-semibold">
                     {minToH(a.minutos)}
                   </span>
+                  {a.autor === usuario && (
+                    <button
+                      aria-label="Excluir apontamento"
+                      onClick={() =>
+                        atualizar(
+                          t.id,
+                          (x) => ({
+                            ...x,
+                            apontamentos: x.apontamentos.filter((y) => y.id !== a.id),
+                          }),
+                          `removeu um apontamento de ${minToH(a.minutos)}`,
+                        )
+                      }
+                      className="text-muted-foreground hover:text-[var(--critical)]"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -515,6 +859,11 @@ export function TarefaDialog({
             </ol>
           </TabsContent>
         </Tabs>
+        <ConfirmarExclusaoTarefa
+          tarefa={confirmarExclusao ? t : null}
+          onOpenChange={setConfirmarExclusao}
+          onExcluida={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -589,14 +938,14 @@ export function NovaTarefaDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[92dvh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nova tarefa</DialogTitle>
           <DialogDescription>
             Crie, vincule a um processo ou cliente e delegue a alguém da equipe.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Título" className="sm:col-span-2">
             <input
               autoFocus

@@ -6,16 +6,53 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  Pencil,
   Plus,
+  RotateCcw,
   Settings2,
+  Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { toast } from "sonner";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { Avatar, Chip, Empty, Panel, Stat } from "@/components/kit";
-import { NovaTarefaDialog, prazoInfo, TarefaDialog } from "@/components/TarefaDialog";
+import { Avatar, Chip, Empty, Field, inputCls, Panel, selectCls, Stat } from "@/components/kit";
+import {
+  NovaTarefaDialog,
+  prazoInfo,
+  TarefaDialog,
+  TarefaMenu,
+  useAcoesTarefa,
+} from "@/components/TarefaDialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ocorrencias, tipoTone } from "@/lib/agenda";
-import { diasAte, fmtDM, parseISO, HOJE, type Tarefa } from "@/lib/data";
+import {
+  agoraCarimbo,
+  diasAte,
+  fmtDM,
+  parseISO,
+  HOJE,
+  uid,
+  type Intimacao,
+  type Tarefa,
+} from "@/lib/data";
 import { usePendencias } from "@/lib/pendencias";
 import { useApp, type WidgetId } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -33,18 +70,44 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
+function saudacao(hora: number) {
+  if (hora >= 5 && hora < 12) return "Bom dia";
+  if (hora >= 12 && hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+const fmtAgora = (d: Date) => {
+  const data = d.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${data} · ${hora}`;
+};
+
+/** Hora atual do aparelho, atualizada a cada minuto (só no navegador, para não
+ *  divergir do horário do servidor na renderização inicial). */
+function useAgora() {
+  const [agora, setAgora] = useState<Date | null>(null);
+  useEffect(() => {
+    setAgora(new Date());
+    const id = setInterval(() => setAgora(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return agora;
+}
+
 function Dashboard() {
   const { usuario, widgets, setWidgets } = useApp();
   const [editando, setEditando] = useState(false);
   const [arrastando, setArrastando] = useState<WidgetId | null>(null);
   const [tarefaAberta, setTarefaAberta] = useState<string | null>(null);
-  const [novaTarefa, setNovaTarefa] = useState<null | {
-    titulo: string;
-    vinculo: string;
-    descricao: string;
-  }>(null);
+  const [criarTarefa, setCriarTarefa] = useState(false);
 
   const primeiroNome = usuario.split(" ")[0];
+  const agora = useAgora();
   const mover = (id: WidgetId, delta: number) =>
     setWidgets((prev) => {
       const i = prev.findIndex((w) => w.id === id);
@@ -70,8 +133,8 @@ function Dashboard() {
     resumo: () => <Resumo />,
     pendencias: () => <Pendencias />,
     agenda: () => <ProximosEventos />,
-    tarefas: () => <MinhasTarefas onAbrir={setTarefaAberta} />,
-    intimacoes: () => <Intimacoes onCriarTarefa={(p) => setNovaTarefa(p)} />,
+    tarefas: () => <MinhasTarefas onAbrir={setTarefaAberta} onNova={() => setCriarTarefa(true)} />,
+    intimacoes: () => <Intimacoes />,
     equipe: () => <CargaEquipe />,
   };
 
@@ -79,8 +142,8 @@ function Dashboard() {
 
   return (
     <AppShell
-      title={`Bom dia, ${primeiroNome}`}
-      subtitle="terça-feira, 09 de abril de 2024 · 08:12"
+      title={agora ? `${saudacao(agora.getHours())}, ${primeiroNome}` : `Olá, ${primeiroNome}`}
+      subtitle={agora ? fmtAgora(agora) : ""}
     >
       <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
@@ -101,7 +164,7 @@ function Dashboard() {
           <p className="mb-2 px-1 text-xs text-muted-foreground">
             Arraste para reordenar, use as setas ou o olho para mostrar/ocultar blocos.
           </p>
-          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {widgets.map((w, i) => (
               <div
                 key={w.id}
@@ -151,7 +214,7 @@ function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {widgets
           .filter((w) => w.visivel)
           .map((w) => (
@@ -162,11 +225,7 @@ function Dashboard() {
       </div>
 
       <TarefaDialog tarefaId={tarefaAberta} onOpenChange={(o) => !o && setTarefaAberta(null)} />
-      <NovaTarefaDialog
-        open={!!novaTarefa}
-        onOpenChange={(o) => !o && setNovaTarefa(null)}
-        preset={novaTarefa ? { ...novaTarefa, vinculoTipo: "Processo", prioridade: "Alta" } : {}}
-      />
+      <NovaTarefaDialog open={criarTarefa} onOpenChange={setCriarTarefa} />
     </AppShell>
   );
 }
@@ -233,7 +292,7 @@ function Pendencias() {
       {pendencias.length === 0 ? (
         <Empty>Tudo em dia. Nenhuma pendência para você.</Empty>
       ) : (
-        <div className="grid divide-y divide-border md:grid-cols-2 md:divide-y-0">
+        <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-y-0">
           {pendencias.slice(0, 8).map((p, i) => (
             <button
               key={p.id}
@@ -311,8 +370,9 @@ function ProximosEventos() {
   );
 }
 
-function MinhasTarefas({ onAbrir }: { onAbrir: (id: string) => void }) {
-  const { tarefas, setTarefas, usuario } = useApp();
+function MinhasTarefas({ onAbrir, onNova }: { onAbrir: (id: string) => void; onNova: () => void }) {
+  const { tarefas, usuario } = useApp();
+  const { alternarConclusao } = useAcoesTarefa();
   const minhas = tarefas
     .filter((t) => t.responsavel === usuario)
     .sort(
@@ -321,13 +381,6 @@ function MinhasTarefas({ onAbrir }: { onAbrir: (id: string) => void }) {
         a.prazo.localeCompare(b.prazo),
     );
   const concluidas = minhas.filter((t) => t.coluna === "Concluído").length;
-
-  const toggle = (t: Tarefa) =>
-    setTarefas((prev) =>
-      prev.map((x) =>
-        x.id === t.id ? { ...x, coluna: x.coluna === "Concluído" ? "A Fazer" : "Concluído" } : x,
-      ),
-    );
 
   return (
     <Panel
@@ -339,10 +392,13 @@ function MinhasTarefas({ onAbrir }: { onAbrir: (id: string) => void }) {
           </span>
           <Link
             to="/tarefas"
-            className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+            className="hidden text-[11px] font-medium text-muted-foreground hover:text-foreground sm:inline"
           >
             Abrir quadro →
           </Link>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={onNova}>
+            <Plus className="size-3.5" /> Nova
+          </Button>
         </>
       }
       delay={160}
@@ -362,9 +418,9 @@ function MinhasTarefas({ onAbrir }: { onAbrir: (id: string) => void }) {
             >
               <button
                 aria-label={feita ? "Reabrir" : "Concluir"}
-                onClick={() => toggle(t)}
+                onClick={() => alternarConclusao(t)}
                 className={cn(
-                  "grid size-4 shrink-0 place-items-center rounded-full border-2",
+                  "grid size-5 shrink-0 place-items-center rounded-full border-2",
                   feita
                     ? "border-[var(--success)] bg-[var(--success)]"
                     : "border-muted-foreground/50 hover:border-[var(--success)]",
@@ -386,6 +442,7 @@ function MinhasTarefas({ onAbrir }: { onAbrir: (id: string) => void }) {
                 </span>
               </button>
               {!feita && <Chip tone={p.tone}>{p.label}</Chip>}
+              <TarefaMenu t={t} onEditar={() => onAbrir(t.id)} className="-mr-1 size-7" />
             </div>
           );
         })}
@@ -394,74 +451,260 @@ function MinhasTarefas({ onAbrir }: { onAbrir: (id: string) => void }) {
   );
 }
 
-function Intimacoes({
-  onCriarTarefa,
-}: {
-  onCriarTarefa: (p: { titulo: string; vinculo: string; descricao: string }) => void;
-}) {
-  const { intimacoes, setIntimacoes } = useApp();
+function Intimacoes() {
+  const { intimacoes, setIntimacoes, processos, registrar } = useApp();
+  const [editando, setEditando] = useState<Intimacao | null>(null);
+  const [criando, setCriando] = useState(false);
+  const [apagando, setApagando] = useState<Intimacao | null>(null);
+  const pendentes = intimacoes.filter((i) => !i.concluida).length;
+
+  const alternarConclusao = (i: Intimacao) => {
+    const concluir = !i.concluida;
+    setIntimacoes((prev) =>
+      prev.map((x) => (x.id === i.id ? { ...x, concluida: concluir, lida: true } : x)),
+    );
+    registrar(
+      "Editou",
+      "Intimações",
+      `${concluir ? "Concluiu" : "Reabriu"} a intimação do processo ${i.processo}`,
+    );
+    toast.success(concluir ? "Intimação concluída" : "Intimação reaberta");
+  };
+
+  const apagar = (i: Intimacao) => {
+    const indice = intimacoes.findIndex((x) => x.id === i.id);
+    setIntimacoes((prev) => prev.filter((x) => x.id !== i.id));
+    registrar("Excluiu", "Intimações", `Apagou a intimação do processo ${i.processo}`);
+    toast.success("Intimação apagada", {
+      action: {
+        label: "Desfazer",
+        onClick: () =>
+          setIntimacoes((prev) => {
+            if (prev.some((x) => x.id === i.id)) return prev;
+            const copia = [...prev];
+            copia.splice(Math.max(0, indice), 0, i);
+            return copia;
+          }),
+      },
+    });
+  };
+
+  const nova = () => {
+    const { dataCurta, hora } = agoraCarimbo();
+    setCriando(true);
+    setEditando({
+      id: uid(),
+      processo: processos[0]?.numero ?? "",
+      resumo: "",
+      recebida: `${dataCurta} às ${hora}`,
+      prazoDias: 5,
+      lida: false,
+    });
+  };
+
+  const salvar = (i: Intimacao) => {
+    if (criando) {
+      setIntimacoes((prev) => [i, ...prev]);
+      registrar("Criou", "Intimações", `Cadastrou intimação do processo ${i.processo}`);
+      toast.success("Intimação adicionada");
+    } else {
+      setIntimacoes((prev) => prev.map((x) => (x.id === i.id ? i : x)));
+      registrar("Editou", "Intimações", `Editou a intimação do processo ${i.processo}`);
+      toast.success("Intimação atualizada");
+    }
+    setEditando(null);
+    setCriando(false);
+  };
+
   return (
     <Panel
       title={
         <span className="flex items-center gap-2">
           Novas intimações
-          {intimacoes.some((i) => !i.lida) && (
-            <Chip tone="warning">{intimacoes.filter((i) => !i.lida).length} não lidas</Chip>
-          )}
+          {pendentes > 0 && <Chip tone="warning">{pendentes} pendentes</Chip>}
         </span>
+      }
+      action={
+        <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={nova}>
+          <Plus className="size-3.5" /> Nova
+        </Button>
       }
       delay={200}
     >
       <div className="divide-y divide-border">
-        {intimacoes.map((i) => (
-          <div key={i.id} className={cn("px-4 py-3", !i.lida && "bg-[var(--warning-soft)]/40")}>
-            <div className="flex items-center gap-2">
-              {!i.lida && <span className="size-2 shrink-0 rounded-full bg-[var(--warning)]" />}
-              <span className="truncate font-mono text-[11px] text-muted-foreground">
-                {i.processo}
-              </span>
-              <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
-                {i.recebida}
-              </span>
-            </div>
-            <p className="mt-1 text-sm">{i.resumo}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-7 text-[11px]"
-                onClick={() => {
-                  setIntimacoes((prev) =>
-                    prev.map((x) => (x.id === i.id ? { ...x, lida: true } : x)),
-                  );
-                  onCriarTarefa({
-                    titulo: "Analisar intimação",
-                    vinculo: i.processo,
-                    descricao: i.resumo,
-                  });
-                }}
+        {intimacoes.length === 0 && <Empty>Nenhuma intimação.</Empty>}
+        {[...intimacoes]
+          .sort((a, b) => Number(!!a.concluida) - Number(!!b.concluida))
+          .map((i) => (
+            <div
+              key={i.id}
+              className={cn("px-4 py-3", !i.lida && !i.concluida && "bg-[var(--warning-soft)]/40")}
+            >
+              <div className="flex items-center gap-2">
+                {!i.lida && !i.concluida && (
+                  <span className="size-2 shrink-0 rounded-full bg-[var(--warning)]" />
+                )}
+                <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  {i.processo}
+                </span>
+                {i.concluida && <Chip tone="success">Concluída</Chip>}
+                <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
+                  {i.recebida}
+                </span>
+              </div>
+              <p
+                className={cn("mt-1 text-sm", i.concluida && "text-muted-foreground line-through")}
               >
-                <Plus className="size-3" /> Criar tarefa
-              </Button>
-              {!i.lida && (
+                {i.resumo}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant={i.concluida ? "outline" : "secondary"}
+                  className="h-7 text-[11px]"
+                  onClick={() => alternarConclusao(i)}
+                >
+                  {i.concluida ? <RotateCcw className="size-3" /> : <Check className="size-3" />}
+                  {i.concluida ? "Reabrir" : "Concluir"}
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() =>
-                    setIntimacoes((prev) =>
-                      prev.map((x) => (x.id === i.id ? { ...x, lida: true } : x)),
-                    )
-                  }
+                  onClick={() => setEditando(i)}
                 >
-                  Marcar como lida
+                  <Pencil className="size-3" /> Editar
                 </Button>
-              )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px] text-[var(--critical)] hover:bg-[var(--critical-soft)] hover:text-[var(--critical)]"
+                  onClick={() => setApagando(i)}
+                >
+                  <Trash2 className="size-3" /> Apagar
+                </Button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
+
+      <EditarIntimacaoDialog
+        intimacao={editando}
+        nova={criando}
+        processos={processos.map((p) => p.numero)}
+        onOpenChange={(o) => {
+          if (o) return;
+          setEditando(null);
+          setCriando(false);
+        }}
+        onSalvar={salvar}
+      />
+
+      <AlertDialog open={!!apagando} onOpenChange={(o) => !o && setApagando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar intimação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A intimação do processo{" "}
+              <strong className="font-mono text-foreground">{apagando?.processo}</strong> será
+              removida da lista.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--critical)] text-white hover:bg-[var(--critical)]/90"
+              onClick={() => apagando && apagar(apagando)}
+            >
+              <Trash2 className="size-4" /> Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Panel>
+  );
+}
+
+function EditarIntimacaoDialog({
+  intimacao,
+  nova,
+  processos,
+  onOpenChange,
+  onSalvar,
+}: {
+  intimacao: Intimacao | null;
+  nova: boolean;
+  processos: string[];
+  onOpenChange: (open: boolean) => void;
+  onSalvar: (i: Intimacao) => void;
+}) {
+  const [f, setF] = useState<Intimacao | null>(intimacao);
+  useEffect(() => setF(intimacao), [intimacao]);
+
+  // Garante que o processo atual apareça na lista mesmo se não estiver cadastrado.
+  const opcoes = f && !processos.includes(f.processo) ? [f.processo, ...processos] : processos;
+
+  return (
+    <Dialog open={!!intimacao} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{nova ? "Nova intimação" : "Editar intimação"}</DialogTitle>
+          <DialogDescription>
+            {nova
+              ? "Informe o processo, o resumo e o prazo da intimação."
+              : "Ajuste o processo, o resumo ou o prazo."}
+          </DialogDescription>
+        </DialogHeader>
+        {f && (
+          <form
+            className="grid gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!f.resumo.trim()) {
+                toast.error("Informe o resumo da intimação");
+                return;
+              }
+              onSalvar({ ...f, resumo: f.resumo.trim() });
+            }}
+          >
+            <Field label="Processo">
+              <select
+                className={selectCls}
+                value={f.processo}
+                onChange={(e) => setF({ ...f, processo: e.target.value })}
+              >
+                {opcoes.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Resumo">
+              <textarea
+                rows={3}
+                className={cn(inputCls, "h-auto py-2")}
+                value={f.resumo}
+                onChange={(e) => setF({ ...f, resumo: e.target.value })}
+              />
+            </Field>
+            <Field label="Prazo (dias)">
+              <input
+                type="number"
+                min={0}
+                className={inputCls}
+                value={f.prazoDias}
+                onChange={(e) => setF({ ...f, prazoDias: Math.max(0, Number(e.target.value)) })}
+              />
+            </Field>
+            <DialogFooter className="mt-2">
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit">{nova ? "Adicionar" : "Salvar"}</Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

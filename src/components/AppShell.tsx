@@ -352,7 +352,7 @@ function BuscaGlobal() {
 }
 
 function PerfilMenu() {
-  const { usuario, role, trocarPerfil, sair } = useApp();
+  const { usuario, role, trocarPerfil, sair, theme, toggleTheme } = useApp();
   const navigate = useNavigate();
   return (
     <DropdownMenu>
@@ -384,6 +384,10 @@ function PerfilMenu() {
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
+        <DropdownMenuItem className="gap-2 sm:hidden" onSelect={toggleTheme}>
+          {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          {theme === "dark" ? "Tema claro" : "Tema escuro"}
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/configuracoes">Configurações</Link>
         </DropdownMenuItem>
@@ -421,25 +425,25 @@ export function AppShell({
     if (logado === false) navigate({ to: "/login" });
   }, [logado, navigate]);
 
-  if (!logado) return <div className="min-h-screen bg-background" />;
+  if (!logado) return <div className="min-h-dvh bg-background" />;
 
   return (
-    <div className="min-h-screen w-full bg-background font-sans text-foreground antialiased">
+    <div className="min-h-dvh w-full bg-background font-sans text-foreground antialiased">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -left-24 -top-32 h-[420px] w-[420px] rounded-full bg-primary/15 blur-3xl" />
         <div className="absolute -right-20 top-1/3 h-[380px] w-[380px] rounded-full bg-[var(--brand-soft)] blur-3xl" />
         <div className="absolute bottom-0 left-1/3 h-[300px] w-[300px] rounded-full bg-primary/10 blur-3xl" />
       </div>
 
-      <div className="flex min-h-screen">
-        <aside className="glass-bar sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border md:flex">
+      <div className="flex min-h-dvh">
+        <aside className="glass-bar sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border md:flex">
           <Brand />
           <NavList />
           <SidebarFooterCard />
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="glass-bar sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border px-4 md:px-7">
+          <header className="glass-bar sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-4 md:px-7">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-foreground/70 md:hidden">
                 <Menu className="size-4" />
@@ -462,13 +466,13 @@ export function AppShell({
               )}
             </div>
 
-            <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
               <BuscaGlobal />
               <Notificacoes />
               <button
                 onClick={toggleTheme}
                 aria-label="Alternar tema"
-                className="grid size-9 place-items-center rounded-lg bg-accent text-foreground/70 transition-colors hover:bg-accent/70"
+                className="hidden size-9 place-items-center sm:grid rounded-lg bg-accent text-foreground/70 transition-colors hover:bg-accent/70"
               >
                 {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
               </button>
@@ -476,7 +480,7 @@ export function AppShell({
             </div>
           </header>
 
-          <main className="min-w-0 p-4 md:p-7">
+          <main className="min-w-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-7">
             {actions && <div className="mb-5 flex flex-wrap items-center gap-2">{actions}</div>}
             {children}
           </main>

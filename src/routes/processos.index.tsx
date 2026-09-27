@@ -270,7 +270,7 @@ function NovoProcessoDialog({
             Os dados completos podem ser ajustados depois na ficha do processo.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Número (CNJ)">
             <input
               className={cn(inputCls, "font-mono")}

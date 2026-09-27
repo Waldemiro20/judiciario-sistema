@@ -98,10 +98,10 @@ function FinanceiroPage() {
   return (
     <AppShell title="Financeiro" subtitle="visível somente para o Advogado Administrador">
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        <Chip tone="warning">
+        <Chip tone="warning" className="shrink whitespace-normal">
           <Lock className="size-3" /> Área restrita — colaboradores não visualizam estes valores
         </Chip>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={() => setNovo("Pagar")}>
             <Plus className="size-4" /> Despesa
           </Button>
@@ -142,7 +142,7 @@ function FinanceiroPage() {
       </div>
 
       <Tabs defaultValue="receber">
-        <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
+        <TabsList className="mb-4 w-full max-w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="receber">Contas a receber</TabsTrigger>
           <TabsTrigger value="pagar">Contas a pagar</TabsTrigger>
           <TabsTrigger value="fluxo">Fluxo de caixa</TabsTrigger>
@@ -281,7 +281,7 @@ function TabelaLancamentos({
 
 function FluxoCaixa() {
   return (
-    <div className="grid gap-5 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
       <Panel title="Entradas e saídas por mês" className="lg:col-span-3">
         <div className="h-72 p-4">
           <ResponsiveContainer width="100%" height="100%">
@@ -418,7 +418,7 @@ function PrestacaoContas() {
             ))}
           </select>
         </Field>
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {[
             { titulo: "Custas e despesas do processo", itens: custas },
             { titulo: "Honorários", itens: honorarios },
@@ -473,7 +473,7 @@ function Provisao() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         {grupos.map((g) => (
           <div key={g.risco} className="glass-panel rounded-2xl p-4">
             <div className="flex items-center justify-between">
@@ -624,7 +624,7 @@ function NovoLancamentoDialog({
             Parcelamentos geram automaticamente as parcelas mensais (1/N, 2/N…).
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Descrição" className="sm:col-span-2">
             <input
               className={inputCls}

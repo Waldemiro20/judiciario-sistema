@@ -135,7 +135,7 @@ function RelatoriosPage() {
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Panel title="Processos por área" action={<Exportar nome="Processos por área" />}>
           <div className="h-64 p-4">
             <ResponsiveContainer width="100%" height="100%">

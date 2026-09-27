@@ -60,7 +60,7 @@ function ConfiguracoesPage() {
       subtitle="usuários, permissões, auditoria, personalização e segurança"
     >
       <Tabs defaultValue="usuarios">
-        <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
+        <TabsList className="mb-4 w-full max-w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="permissoes">Perfis e permissões</TabsTrigger>
           <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
@@ -475,7 +475,7 @@ function Personalizacao() {
   const [novos, setNovos] = useState<Record<string, string>>({});
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <Panel title="Identidade visual">
         <div className="space-y-4 p-5">
           <Field label="Nome do escritório">
@@ -619,7 +619,7 @@ function Seguranca() {
   );
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <Panel title="Proteção">
         <div className="divide-y divide-border">
           <Linha

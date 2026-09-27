@@ -110,7 +110,7 @@ function ClientePage() {
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-1">
           <Panel>
             <div className="p-5">

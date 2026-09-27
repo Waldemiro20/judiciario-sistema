@@ -91,7 +91,7 @@ function ClientesPage() {
           <AlertTriangle className="size-3.5" /> Documentação pendente
           <span className="font-mono text-[10px]">{pendentes}</span>
         </button>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={() => setConflito(true)}>
             <ShieldCheck className="size-4" /> Conflito de interesses
           </Button>
@@ -279,7 +279,7 @@ function NovoClienteDialog({
             </button>
           ))}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={pf ? "Nome completo" : "Razão social"} className="sm:col-span-2">
             <input className={inputCls} value={nome} onChange={(e) => setNome(e.target.value)} />
           </Field>
@@ -375,7 +375,7 @@ function NovoClienteDialog({
               return (
                 <div
                   key={en.id}
-                  className="grid gap-2 rounded-xl border border-border p-2 sm:grid-cols-[110px_1fr_140px_110px_auto]"
+                  className="grid grid-cols-1 gap-2 rounded-xl border border-border p-2 sm:grid-cols-[110px_1fr_140px_110px_auto]"
                 >
                   <input
                     className={inputCls}

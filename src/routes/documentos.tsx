@@ -166,7 +166,7 @@ function DocumentosPage() {
         onChange={(e) => enviar(e.target.files)}
       />
 
-      <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_1fr]">
         <Panel
           title="Pastas"
           action={
@@ -517,7 +517,7 @@ function DocumentoDialog({ doc, onClose }: { doc: Documento | undefined; onClose
               </div>
             </Field>
             <Field label="Notificar pessoas da equipe">
-              <div className="grid gap-1.5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {usuarios
                   .filter((u) => u.nome !== usuario)
                   .map((u) => (
@@ -600,7 +600,7 @@ function NovaPastaDialog({
         </label>
         {confidencial && (
           <Field label="Quem pode acessar (administradores sempre acessam)">
-            <div className="grid gap-1 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
               {usuarios.map((u) => (
                 <label
                   key={u}

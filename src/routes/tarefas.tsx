@@ -10,6 +10,7 @@ import {
   PRIORIDADES,
   prioridadeTone,
   TarefaDialog,
+  TarefaMenu,
   useAtualizarTarefa,
 } from "@/components/TarefaDialog";
 import { Button } from "@/components/ui/button";
@@ -116,7 +117,7 @@ function TarefasPage() {
       </div>
 
       {vista === "Quadro" && (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {COLUNAS.map((col, ci) => {
             const itens = filtradas
               .filter((t) => t.coluna === col)
@@ -182,6 +183,7 @@ function TarefasPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Prazo</TableHead>
                   <TableHead className="text-right">Tempo</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -195,7 +197,12 @@ function TarefasPage() {
                         className="cursor-pointer"
                         onClick={() => setAberta(t.id)}
                       >
-                        <TableCell className="max-w-[260px] truncate font-medium">
+                        <TableCell
+                          className={cn(
+                            "max-w-[260px] truncate font-medium",
+                            t.coluna === "Concluído" && "text-muted-foreground line-through",
+                          )}
+                        >
                           {t.titulo}
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
@@ -221,6 +228,9 @@ function TarefasPage() {
                         </TableCell>
                         <TableCell className="text-right font-mono text-xs">
                           {minToH(minutosTotais(t))}
+                        </TableCell>
+                        <TableCell className="py-1">
+                          <TarefaMenu t={t} onEditar={() => setAberta(t.id)} />
                         </TableCell>
                       </TableRow>
                     );
@@ -255,10 +265,18 @@ function CartaoTarefa({
   const feitas = t.subtarefas.filter((s) => s.feita).length;
   const min = minutosTotais(t);
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
         "w-full cursor-grab rounded-xl border border-border bg-background/70 p-3 text-left shadow-sm transition-all hover:border-primary/30 hover:shadow-md active:cursor-grabbing",
         arrastando && "opacity-40",
@@ -270,6 +288,7 @@ function CartaoTarefa({
       <div className="flex items-center gap-1.5">
         <Chip tone={prioridadeTone[t.prioridade]}>{t.prioridade}</Chip>
         <Chip tone={p.tone}>{p.label}</Chip>
+        <TarefaMenu t={t} onEditar={onClick} className="-my-1 -mr-1.5 ml-auto size-7" />
       </div>
       <div
         className={cn(
@@ -309,7 +328,7 @@ function CartaoTarefa({
         )}
         <Avatar nome={t.responsavel} className="ml-auto size-6" />
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -320,7 +339,7 @@ function Timesheet({ tarefas, onAbrir }: { tarefas: Tarefa[]; onAbrir: (id: stri
   const total = linhas.reduce((s, l) => s + l.minutos, 0);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       <Panel title="Horas por pessoa" className="lg:col-span-1">
         <div className="space-y-3 p-4">
           {[...porPessoa.entries()]

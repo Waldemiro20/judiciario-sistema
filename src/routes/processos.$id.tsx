@@ -14,7 +14,7 @@ import {
   statusTone,
   type Tone,
 } from "@/components/kit";
-import { NovaTarefaDialog, prazoInfo, TarefaDialog } from "@/components/TarefaDialog";
+import { NovaTarefaDialog, prazoInfo, TarefaDialog, TarefaMenu } from "@/components/TarefaDialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { tipoTone } from "@/lib/agenda";
@@ -208,7 +208,7 @@ function ProcessoPage() {
       </div>
 
       <Tabs defaultValue="dados">
-        <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
+        <TabsList className="mb-4 w-full max-w-full justify-start overflow-x-auto sm:w-auto">
           <TabsTrigger value="dados">Detalhes</TabsTrigger>
           <TabsTrigger value="historico">
             Histórico{" "}
@@ -251,7 +251,7 @@ function ProcessoPage() {
               ))
             }
           >
-            <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
               <Campo
                 label="Título / Ação"
                 editando={editando}
@@ -341,7 +341,7 @@ function ProcessoPage() {
               <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Partes envolvidas
               </h3>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {p.partes.map((pt) => (
                   <div
                     key={pt.nome}
@@ -362,7 +362,7 @@ function ProcessoPage() {
         </TabsContent>
 
         <TabsContent value="historico">
-          <div className="grid gap-5 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
             <Panel title="Histórico de movimentações" className="lg:col-span-3">
               <ol className="relative m-5 space-y-5 border-l-2 border-border pl-6">
                 {[...p.movimentacoes].reverse().map((m) => (
@@ -527,27 +527,32 @@ function ProcessoPage() {
               {tarefasProc.map((t) => {
                 const pz = prazoInfo(t);
                 return (
-                  <button
+                  <div
                     key={t.id}
-                    onClick={() => setTarefaAberta(t.id)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-accent"
+                    className="flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-accent"
                   >
-                    <Avatar nome={t.responsavel} />
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={cn(
-                          "block truncate text-sm font-medium",
-                          t.coluna === "Concluído" && "text-muted-foreground line-through",
-                        )}
-                      >
-                        {t.titulo}
+                    <button
+                      onClick={() => setTarefaAberta(t.id)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <Avatar nome={t.responsavel} />
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cn(
+                            "block truncate text-sm font-medium",
+                            t.coluna === "Concluído" && "text-muted-foreground line-through",
+                          )}
+                        >
+                          {t.titulo}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {t.responsavel} · {t.coluna}
+                        </span>
                       </span>
-                      <span className="block text-[11px] text-muted-foreground">
-                        {t.responsavel} · {t.coluna}
-                      </span>
-                    </span>
-                    <Chip tone={pz.tone}>{pz.label}</Chip>
-                  </button>
+                      <Chip tone={pz.tone}>{pz.label}</Chip>
+                    </button>
+                    <TarefaMenu t={t} onEditar={() => setTarefaAberta(t.id)} />
+                  </div>
                 );
               })}
             </div>

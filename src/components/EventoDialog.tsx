@@ -165,7 +165,7 @@ export function EventoDialog({
           ))}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-6">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
           <Field label="Título" className="sm:col-span-6">
             <input
               className={inputCls}
