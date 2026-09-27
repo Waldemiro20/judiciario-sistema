@@ -196,3 +196,41 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* Cores principais escolhidas em Configurações → Personalização */
+:root[data-brand="vinho"] {
+  --primary: oklch(0.42 0.13 15);
+  --brand-soft: oklch(0.93 0.03 15);
+  --brand-soft-foreground: oklch(0.42 0.13 15);
+  --ring: oklch(0.42 0.13 15 / 40%);
+  --sidebar-primary: oklch(0.42 0.13 15);
+}
+:root[data-brand="verde"] {
+  --primary: oklch(0.45 0.09 165);
+  --brand-soft: oklch(0.93 0.03 165);
+  --brand-soft-foreground: oklch(0.4 0.09 165);
+  --ring: oklch(0.45 0.09 165 / 40%);
+  --sidebar-primary: oklch(0.45 0.09 165);
+}
+:root[data-brand="grafite"] {
+  --primary: oklch(0.3 0.01 260);
+  --brand-soft: oklch(0.92 0.005 260);
+  --brand-soft-foreground: oklch(0.3 0.01 260);
+  --ring: oklch(0.3 0.01 260 / 40%);
+  --sidebar-primary: oklch(0.3 0.01 260);
+}
+.dark[data-brand="vinho"] {
+  --primary: oklch(0.74 0.11 15);
+  --brand-soft: oklch(0.74 0.11 15 / 18%);
+  --brand-soft-foreground: oklch(0.84 0.07 15);
+}
+.dark[data-brand="verde"] {
+  --primary: oklch(0.76 0.1 165);
+  --brand-soft: oklch(0.76 0.1 165 / 18%);
+  --brand-soft-foreground: oklch(0.85 0.07 165);
+}
+.dark[data-brand="grafite"] {
+  --primary: oklch(0.85 0.01 260);
+  --brand-soft: oklch(1 0 0 / 12%);
+  --brand-soft-foreground: oklch(0.92 0.005 260);
+}

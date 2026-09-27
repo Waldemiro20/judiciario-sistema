@@ -1,211 +1,499 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Plus,
+  Settings2,
+} from "lucide-react";
+import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { clientes, eventos, processos } from "@/lib/data";
-import { useApp } from "@/lib/store";
+import { Avatar, Chip, Empty, Panel, Stat } from "@/components/kit";
+import { NovaTarefaDialog, prazoInfo, TarefaDialog } from "@/components/TarefaDialog";
+import { Button } from "@/components/ui/button";
+import { ocorrencias, tipoTone } from "@/lib/agenda";
+import { diasAte, fmtDM, parseISO, HOJE, type Tarefa } from "@/lib/data";
+import { usePendencias } from "@/lib/pendencias";
+import { useApp, type WidgetId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Painel de Prazos — Vértice Gestão Jurídica" },
+      { title: "Dashboard — Gestão Jurídica" },
       {
         name: "description",
-        content:
-          "Painel diário do escritório: processos ativos, tarefas pendentes, audiências e prazos próximos.",
-      },
-      { property: "og:title", content: "Painel de Prazos — Vértice" },
-      {
-        property: "og:description",
-        content: "Controle diário de produtividade, audiências e prazos da equipe.",
+        content: "Painel diário do escritório: tarefas, pendências, audiências e prazos.",
       },
     ],
   }),
   component: Dashboard,
 });
 
-const urgencyStyles: Record<string, { chip: string; label: string; date: string }> = {
-  critico: {
-    chip: "bg-[var(--critical-soft)] text-[var(--critical)]",
-    label: "Crítico",
-    date: "bg-[var(--critical-soft)] text-[var(--critical)]",
-  },
-  hoje: {
-    chip: "bg-[var(--warning-soft)] text-[var(--warning)]",
-    label: "Hoje",
-    date: "bg-[var(--warning-soft)] text-[var(--warning)]",
-  },
-  proximo: {
-    chip: "bg-[var(--brand-soft)] text-[var(--brand-soft-foreground)]",
-    label: "Próximo",
-    date: "bg-[var(--brand-soft)] text-[var(--brand-soft-foreground)]",
-  },
-  agendado: {
-    chip: "bg-accent text-muted-foreground",
-    label: "Agendado",
-    date: "bg-accent text-muted-foreground",
-  },
-};
-
 function Dashboard() {
+  const { usuario, widgets, setWidgets } = useApp();
+  const [editando, setEditando] = useState(false);
+  const [arrastando, setArrastando] = useState<WidgetId | null>(null);
+  const [tarefaAberta, setTarefaAberta] = useState<string | null>(null);
+  const [novaTarefa, setNovaTarefa] = useState<null | {
+    titulo: string;
+    vinculo: string;
+    descricao: string;
+  }>(null);
+
+  const primeiroNome = usuario.split(" ")[0];
+  const mover = (id: WidgetId, delta: number) =>
+    setWidgets((prev) => {
+      const i = prev.findIndex((w) => w.id === id);
+      const j = i + delta;
+      if (j < 0 || j >= prev.length) return prev;
+      const copia = [...prev];
+      [copia[i], copia[j]] = [copia[j]!, copia[i]!];
+      return copia;
+    });
+
+  const soltarSobre = (alvo: WidgetId) => {
+    if (!arrastando || arrastando === alvo) return;
+    setWidgets((prev) => {
+      const origem = prev.find((w) => w.id === arrastando)!;
+      const sem = prev.filter((w) => w.id !== arrastando);
+      const idx = sem.findIndex((w) => w.id === alvo);
+      sem.splice(idx, 0, origem);
+      return sem;
+    });
+  };
+
+  const render: Record<WidgetId, () => React.ReactNode> = {
+    resumo: () => <Resumo />,
+    pendencias: () => <Pendencias />,
+    agenda: () => <ProximosEventos />,
+    tarefas: () => <MinhasTarefas onAbrir={setTarefaAberta} />,
+    intimacoes: () => <Intimacoes onCriarTarefa={(p) => setNovaTarefa(p)} />,
+    equipe: () => <CargaEquipe />,
+  };
+
+  const largos: WidgetId[] = ["resumo", "pendencias"];
+
+  return (
+    <AppShell
+      title={`Bom dia, ${primeiroNome}`}
+      subtitle="terça-feira, 09 de abril de 2024 · 08:12"
+    >
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Aqui está o que precisa da sua atenção hoje.
+        </p>
+        <Button
+          variant={editando ? "default" : "outline"}
+          size="sm"
+          onClick={() => setEditando((e) => !e)}
+        >
+          {editando ? <Check className="size-4" /> : <Settings2 className="size-4" />}
+          {editando ? "Concluir" : "Personalizar painel"}
+        </Button>
+      </div>
+
+      {editando && (
+        <div className="glass-panel mb-5 rounded-2xl p-3">
+          <p className="mb-2 px-1 text-xs text-muted-foreground">
+            Arraste para reordenar, use as setas ou o olho para mostrar/ocultar blocos.
+          </p>
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {widgets.map((w, i) => (
+              <div
+                key={w.id}
+                draggable
+                onDragStart={() => setArrastando(w.id)}
+                onDragEnd={() => setArrastando(null)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => soltarSobre(w.id)}
+                className={cn(
+                  "flex cursor-grab items-center gap-2 rounded-lg border border-border bg-background/60 px-2 py-2 text-sm",
+                  arrastando === w.id && "opacity-50",
+                  !w.visivel && "text-muted-foreground",
+                )}
+              >
+                <GripVertical className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{w.titulo}</span>
+                <button
+                  aria-label="Subir"
+                  onClick={() => mover(w.id, -1)}
+                  disabled={i === 0}
+                  className="rounded p-1 hover:bg-accent disabled:opacity-30"
+                >
+                  <ArrowUp className="size-3.5" />
+                </button>
+                <button
+                  aria-label="Descer"
+                  onClick={() => mover(w.id, 1)}
+                  disabled={i === widgets.length - 1}
+                  className="rounded p-1 hover:bg-accent disabled:opacity-30"
+                >
+                  <ArrowDown className="size-3.5" />
+                </button>
+                <button
+                  aria-label={w.visivel ? "Ocultar" : "Mostrar"}
+                  onClick={() =>
+                    setWidgets((prev) =>
+                      prev.map((x) => (x.id === w.id ? { ...x, visivel: !x.visivel } : x)),
+                    )
+                  }
+                  className="rounded p-1 hover:bg-accent"
+                >
+                  {w.visivel ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        {widgets
+          .filter((w) => w.visivel)
+          .map((w) => (
+            <div key={w.id} className={cn("min-w-0", largos.includes(w.id) && "lg:col-span-2")}>
+              {render[w.id]()}
+            </div>
+          ))}
+      </div>
+
+      <TarefaDialog tarefaId={tarefaAberta} onOpenChange={(o) => !o && setTarefaAberta(null)} />
+      <NovaTarefaDialog
+        open={!!novaTarefa}
+        onOpenChange={(o) => !o && setNovaTarefa(null)}
+        preset={novaTarefa ? { ...novaTarefa, vinculoTipo: "Processo", prioridade: "Alta" } : {}}
+      />
+    </AppShell>
+  );
+}
+
+function Resumo() {
+  const { processos, clientes, tarefas, eventos, usuario } = useApp();
+  const ativos = processos.filter((p) => p.status !== "Arquivado").length;
+  const minhas = tarefas.filter((t) => t.coluna !== "Concluído" && t.responsavel === usuario);
+  const atrasadas = minhas.filter((t) => diasAte(t.prazo) < 0).length;
+  const proximos = ocorrencias(eventos, parseISO(HOJE), new Date(2024, 3, 11)).filter(
+    (o) => o.evento.tipo !== "Reunião",
+  );
+
+  return (
+    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <Stat
+        label="Processos em andamento"
+        value={ativos}
+        note={`${processos.length} cadastrados no total`}
+        delay={0}
+      />
+      <Stat
+        label="Clientes cadastrados"
+        value={clientes.length}
+        note={`${clientes.filter((c) => c.status === "Ativo").length} ativos`}
+        delay={60}
+      />
+      <Stat
+        label="Minhas tarefas pendentes"
+        value={minhas.length}
+        note={atrasadas ? `${atrasadas} atrasada${atrasadas > 1 ? "s" : ""}` : "nenhuma atrasada"}
+        tone={atrasadas ? "warning" : "success"}
+        delay={120}
+      />
+      <Stat
+        label="Prazos e audiências (48h)"
+        value={proximos.length}
+        note="hoje e amanhã — atenção"
+        tone="critical"
+        delay={180}
+      />
+    </div>
+  );
+}
+
+const nivelTone = { critico: "critical", atencao: "warning", info: "brand" } as const;
+const nivelLabel = { critico: "Urgente", atencao: "Atenção", info: "Aviso" } as const;
+
+function Pendencias() {
+  const pendencias = usePendencias();
+  const navigate = useNavigate();
+  return (
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          Pendências que precisam de atenção
+          <Chip tone={pendencias.some((p) => p.nivel === "critico") ? "critical" : "warning"}>
+            {pendencias.length}
+          </Chip>
+        </span>
+      }
+      delay={80}
+    >
+      {pendencias.length === 0 ? (
+        <Empty>Tudo em dia. Nenhuma pendência para você.</Empty>
+      ) : (
+        <div className="grid divide-y divide-border md:grid-cols-2 md:divide-y-0">
+          {pendencias.slice(0, 8).map((p, i) => (
+            <button
+              key={p.id}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onClick={() => navigate({ to: p.to as any, params: p.params as any })}
+              className={cn(
+                "flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent md:border-b md:border-border",
+                i % 2 === 0 && "md:border-r",
+              )}
+            >
+              <Chip tone={nivelTone[p.nivel]} className="mt-0.5 w-16 justify-center">
+                {nivelLabel[p.nivel]}
+              </Chip>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium leading-tight">{p.titulo}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                  {p.detalhe}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ProximosEventos() {
+  const { eventos } = useApp();
+  const lista = ocorrencias(eventos, parseISO(HOJE), new Date(2024, 3, 30)).slice(0, 6);
+  return (
+    <Panel
+      title="Próximos prazos e audiências"
+      action={
+        <Link
+          to="/agenda"
+          className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        >
+          Ver agenda →
+        </Link>
+      }
+      delay={120}
+    >
+      <div className="divide-y divide-border">
+        {lista.map(({ evento: e, data }) => {
+          const d = diasAte(data);
+          const tone = tipoTone[e.tipo];
+          return (
+            <div key={e.id + data} className="flex items-start gap-3 px-4 py-3">
+              <div
+                className={cn(
+                  "w-12 shrink-0 rounded-lg py-1.5 text-center font-mono text-[11px] leading-tight",
+                  tone.bg,
+                  tone.text,
+                )}
+              >
+                {fmtDM(data)}
+                <br />
+                {e.hora}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium leading-tight">{e.titulo}</div>
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {e.tipo} · {e.local} · {e.advogado}
+                </div>
+              </div>
+              <Chip tone={d === 0 ? "critical" : d === 1 ? "warning" : "neutral"}>
+                {d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `${d} dias`}
+              </Chip>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+function MinhasTarefas({ onAbrir }: { onAbrir: (id: string) => void }) {
   const { tarefas, setTarefas, usuario } = useApp();
-
-  const minhas = tarefas.filter((t) => t.daSemana && t.responsavel === usuario);
+  const minhas = tarefas
+    .filter((t) => t.responsavel === usuario)
+    .sort(
+      (a, b) =>
+        Number(a.coluna === "Concluído") - Number(b.coluna === "Concluído") ||
+        a.prazo.localeCompare(b.prazo),
+    );
   const concluidas = minhas.filter((t) => t.coluna === "Concluído").length;
-  const pendentes = tarefas.filter((t) => t.coluna !== "Concluído").length;
-  const ativos = processos.filter((p) => p.status === "Ativo").length;
-  const criticos = eventos.filter((e) => e.urgencia === "critico" || e.urgencia === "hoje").length;
 
-  const toggle = (id: string) =>
+  const toggle = (t: Tarefa) =>
     setTarefas((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, coluna: t.coluna === "Concluído" ? "A Fazer" : "Concluído" }
-          : t,
+      prev.map((x) =>
+        x.id === t.id ? { ...x, coluna: x.coluna === "Concluído" ? "A Fazer" : "Concluído" } : x,
       ),
     );
 
-  const cards = [
-    { n: "01", label: "Processos Ativos", value: ativos, note: "+3 esta semana", tone: "text-[var(--success)]" },
-    { n: "02", label: "Total de Clientes", value: clientes.length, note: "2 novos no mês", tone: "text-muted-foreground" },
-    { n: "03", label: "Tarefas Pendentes", value: pendentes, note: "3 vencem hoje", tone: "text-[var(--warning)]" },
-  ];
-
   return (
-    <AppShell title="Bom dia, Dra. Helena" subtitle="terça-feira, 09 de abril · 08:12">
-      <div className="space-y-5">
-        <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-          {cards.map((c, i) => (
+    <Panel
+      title="Minhas tarefas"
+      action={
+        <>
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {concluidas}/{minhas.length}
+          </span>
+          <Link
+            to="/tarefas"
+            className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+          >
+            Abrir quadro →
+          </Link>
+        </>
+      }
+      delay={160}
+    >
+      <div className="space-y-1 p-2">
+        {minhas.length === 0 && <Empty>Nenhuma tarefa atribuída a você.</Empty>}
+        {minhas.map((t) => {
+          const feita = t.coluna === "Concluído";
+          const p = prazoInfo(t);
+          return (
             <div
-              key={c.label}
-              className="glass-panel rise rounded-2xl p-4"
-              style={{ animationDelay: `${i * 60}ms` }}
+              key={t.id}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 transition-colors",
+                !feita && p.tone === "critical" ? "bg-[var(--critical-soft)]" : "hover:bg-accent",
+              )}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs text-muted-foreground">{c.label}</span>
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground/60">{c.n}</span>
-              </div>
-              <div className="mt-2 text-3xl font-bold tracking-tight">{c.value}</div>
-              <div className={cn("mt-1 text-[11px] font-medium", c.tone)}>{c.note}</div>
+              <button
+                aria-label={feita ? "Reabrir" : "Concluir"}
+                onClick={() => toggle(t)}
+                className={cn(
+                  "grid size-4 shrink-0 place-items-center rounded-full border-2",
+                  feita
+                    ? "border-[var(--success)] bg-[var(--success)]"
+                    : "border-muted-foreground/50 hover:border-[var(--success)]",
+                )}
+              >
+                {feita && <Check className="size-2.5 text-background" strokeWidth={4} />}
+              </button>
+              <button onClick={() => onAbrir(t.id)} className="min-w-0 flex-1 text-left">
+                <span
+                  className={cn(
+                    "block truncate text-sm",
+                    feita ? "text-muted-foreground line-through" : "font-medium",
+                  )}
+                >
+                  {t.titulo}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {t.vinculo}
+                </span>
+              </button>
+              {!feita && <Chip tone={p.tone}>{p.label}</Chip>}
             </div>
-          ))}
-          <div
-            className="glass-panel rise rounded-2xl p-4 ring-1 ring-[var(--critical)]/25"
-            style={{ animationDelay: "180ms" }}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs text-muted-foreground">Prazos Próximos</span>
-              <span className="shrink-0 font-mono text-[10px] text-[var(--critical)]">04</span>
-            </div>
-            <div className="mt-2 text-3xl font-bold tracking-tight text-[var(--critical)]">
-              {criticos}
-            </div>
-            <div className="mt-1 text-[11px] font-medium text-[var(--critical)]">
-              em 24h — atenção
-            </div>
-          </div>
-        </section>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
 
-        <section className="grid gap-5 lg:grid-cols-5">
-          <div
-            className="glass-panel rise overflow-hidden rounded-2xl lg:col-span-3"
-            style={{ animationDelay: "120ms" }}
-          >
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold tracking-tight">Próximas Audiências &amp; Prazos</h2>
-              <Link to="/agenda" className="font-mono text-[10px] text-muted-foreground hover:text-foreground">
-                CRONO
-              </Link>
-            </div>
-            <div className="divide-y divide-border">
-              {eventos.slice(0, 5).map((e) => {
-                const s = urgencyStyles[e.urgencia];
-                return (
-                  <div key={e.id} className="flex items-start gap-3 px-4 py-3">
-                    <div
-                      className={cn(
-                        "size-9 shrink-0 rounded-lg py-1.5 text-center font-mono text-[11px] leading-tight",
-                        s.date,
-                      )}
-                    >
-                      {String(e.dia).padStart(2, "0")}/04
-                      <br />
-                      {e.hora}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium leading-tight">{e.titulo}</div>
-                      <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                        {e.local} · {e.advogado}
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                        s.chip,
-                      )}
-                    >
-                      {s.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div
-            className="glass-panel rise overflow-hidden rounded-2xl lg:col-span-2"
-            style={{ animationDelay: "180ms" }}
-          >
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold tracking-tight">Minhas Tarefas da Semana</h2>
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {concluidas}/{minhas.length}
+function Intimacoes({
+  onCriarTarefa,
+}: {
+  onCriarTarefa: (p: { titulo: string; vinculo: string; descricao: string }) => void;
+}) {
+  const { intimacoes, setIntimacoes } = useApp();
+  return (
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          Novas intimações
+          {intimacoes.some((i) => !i.lida) && (
+            <Chip tone="warning">{intimacoes.filter((i) => !i.lida).length} não lidas</Chip>
+          )}
+        </span>
+      }
+      delay={200}
+    >
+      <div className="divide-y divide-border">
+        {intimacoes.map((i) => (
+          <div key={i.id} className={cn("px-4 py-3", !i.lida && "bg-[var(--warning-soft)]/40")}>
+            <div className="flex items-center gap-2">
+              {!i.lida && <span className="size-2 shrink-0 rounded-full bg-[var(--warning)]" />}
+              <span className="truncate font-mono text-[11px] text-muted-foreground">
+                {i.processo}
+              </span>
+              <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
+                {i.recebida}
               </span>
             </div>
-            <div className="space-y-1 p-2">
-              {minhas.map((t) => {
-                const feita = t.coluna === "Concluído";
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => toggle(t.id)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors",
-                      t.prioridade === "Alta" && !feita
-                        ? "bg-[var(--critical-soft)] hover:brightness-95"
-                        : "hover:bg-accent",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "grid size-4 shrink-0 place-items-center rounded-full border-2",
-                        feita
-                          ? "border-[var(--success)] bg-[var(--success)]"
-                          : "border-muted-foreground/50",
-                      )}
-                    >
-                      {feita && <Check className="size-2.5 text-background" strokeWidth={4} />}
-                    </span>
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 truncate text-sm",
-                        feita ? "text-muted-foreground line-through" : "font-medium",
-                      )}
-                    >
-                      {t.titulo}
-                    </span>
-                    {!feita && t.prioridade === "Alta" && (
-                      <span className="shrink-0 font-mono text-[10px] text-[var(--critical)]">
-                        hoje
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            <p className="mt-1 text-sm">{i.resumo}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-7 text-[11px]"
+                onClick={() => {
+                  setIntimacoes((prev) =>
+                    prev.map((x) => (x.id === i.id ? { ...x, lida: true } : x)),
+                  );
+                  onCriarTarefa({
+                    titulo: "Analisar intimação",
+                    vinculo: i.processo,
+                    descricao: i.resumo,
+                  });
+                }}
+              >
+                <Plus className="size-3" /> Criar tarefa
+              </Button>
+              {!i.lida && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() =>
+                    setIntimacoes((prev) =>
+                      prev.map((x) => (x.id === i.id ? { ...x, lida: true } : x)),
+                    )
+                  }
+                >
+                  Marcar como lida
+                </Button>
+              )}
             </div>
           </div>
-        </section>
+        ))}
       </div>
-    </AppShell>
+    </Panel>
+  );
+}
+
+function CargaEquipe() {
+  const { tarefas, usuarios } = useApp();
+  const dados = usuarios.map((u) => {
+    const abertas = tarefas.filter((t) => t.responsavel === u.nome && t.coluna !== "Concluído");
+    return {
+      nome: u.nome,
+      abertas: abertas.length,
+      atrasadas: abertas.filter((t) => diasAte(t.prazo) < 0).length,
+    };
+  });
+  const max = Math.max(1, ...dados.map((d) => d.abertas));
+  return (
+    <Panel title="Carga da equipe" delay={240}>
+      <div className="space-y-3 p-4">
+        {dados.map((d) => (
+          <div key={d.nome} className="flex items-center gap-3">
+            <Avatar nome={d.nome} />
+            <span className="w-32 shrink-0 truncate text-sm">{d.nome}</span>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-accent">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${(d.abertas / max) * 100}%` }}
+              />
+            </div>
+            <span className="w-6 text-right font-mono text-xs">{d.abertas}</span>
+            {d.atrasadas > 0 && <Chip tone="critical">{d.atrasadas} atr.</Chip>}
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
