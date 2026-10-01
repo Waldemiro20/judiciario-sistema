@@ -6,24 +6,15 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
-    meta: [{ title: "Entrar — Gestão Jurídica" }, { name: "theme-color", content: "#0a1628" }],
-    links: [
-      {
-        rel: "preload",
-        as: "image",
-        href: "/login-escritorio-sm.webp",
-        media: "(max-width: 1023px)",
-      },
-      { rel: "preload", as: "image", href: "/login-escritorio.webp", media: "(min-width: 1024px)" },
-    ],
+    meta: [{ title: "Entrar — Gestão Jurídica" }, { name: "theme-color", content: "#2B2119" }],
+    links: [{ rel: "preload", as: "image", href: "/login.jpeg" }],
   }),
   component: LoginPage,
 });
 
-/* Tela de login com identidade própria (azul-marinho), independente do tema
-   claro/escuro escolhido dentro do sistema. */
+/* Tela de login: espresso, branco e dourado da marca. */
 const campoCls =
-  "h-12 w-full rounded-lg border border-[#93c5fd]/15 bg-[#0a1628]/60 pl-10 text-sm text-white outline-none transition-colors placeholder:text-white/30 hover:border-[#93c5fd]/30 focus:border-[#60a5fa]/70 focus:bg-[#0a1628]/80 focus:ring-2 focus:ring-[#3b82f6]/25 aria-[invalid=true]:border-[#e5484d]/60";
+  "h-12 w-full rounded-md border border-[#c4a574] bg-[#2B2119] pl-10 text-sm text-white outline-none transition-colors placeholder:text-white/40 hover:border-[#d4b88a] focus:border-[#c4a574] focus:bg-[#2B2119] focus:ring-2 focus:ring-[#c4a574]/30 aria-[invalid=true]:border-red-400/80";
 
 function LoginPage() {
   const { entrar, logado, identidade } = useApp();
@@ -64,31 +55,27 @@ function LoginPage() {
   const ano = new Date().getFullYear();
 
   return (
-    <div className="relative flex min-h-dvh flex-col bg-[#0a1628] font-sans text-white antialiased lg:flex-row">
+    <div className="relative flex min-h-dvh flex-col bg-[#2B2119] font-sans text-white antialiased lg:flex-row">
       {/* Imagem — faixa no topo no celular, metade da tela no computador */}
       <div className="relative h-[34dvh] min-h-56 shrink-0 overflow-hidden lg:h-auto lg:min-h-dvh lg:w-[52%]">
-        <picture>
-          <source media="(min-width: 1024px)" srcSet="/login-escritorio.webp" />
-          <img
-            src="/login-escritorio-sm.webp"
-            alt="Advogado assinando um documento no escritório"
-            className="absolute inset-0 size-full object-cover object-[center_40%]"
-          />
-        </picture>
-        <div className="absolute inset-0 bg-[#1e3a8a]/35 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a1628]/60 via-[#0a1628]/45 to-[#0a1628] lg:bg-gradient-to-r lg:from-[#0a1628]/75 lg:via-[#0a1628]/45 lg:to-[#0a1628]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a1628] via-transparent to-transparent" />
+        <img
+          src="/login.jpeg"
+          alt="Balança da justiça e martelo sobre a mesa do escritório"
+          className="absolute inset-0 size-full object-cover object-[center_40%]"
+        />
+        <div className="absolute inset-0 bg-stone-950/45" />
+        <div className="absolute inset-0 bg-gradient-to-b from-stone-950/35 via-transparent to-[#2B2119] lg:bg-gradient-to-r lg:from-stone-950/50 lg:via-stone-950/25 lg:to-[#2B2119]" />
 
-        <div className="relative p-6 pt-[max(1.5rem,env(safe-area-inset-top))] sm:p-10 lg:p-14">
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-lg border border-[#60a5fa]/40 bg-[#0a1628]/50 text-sm font-bold text-[#bfdbfe] backdrop-blur-sm">
+        <div className="absolute inset-0 z-10 flex items-center justify-center p-6 pt-[max(1.5rem,env(safe-area-inset-top))] sm:p-10 lg:p-14">
+          <div className="flex flex-col items-center text-center text-white">
+            <div className="grid size-16 place-items-center rounded-md border border-[#c4a574] bg-stone-950/35 text-lg font-bold tracking-wide text-white backdrop-blur-[2px]">
               {identidade.sigla}
             </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold leading-none tracking-wide">
+            <div className="mt-5 max-w-[90%]">
+              <div className="text-lg font-semibold leading-snug tracking-wide sm:text-xl">
                 {identidade.nomeEscritorio}
               </div>
-              <div className="mt-1.5 font-mono text-[10px] tracking-[0.2em] text-[#60a5fa]">
+              <div className="mt-2 font-mono text-xs tracking-[0.2em] text-[#c4a574]">
                 ADVOCACIA &amp; CONSULTORIA
               </div>
             </div>
@@ -99,19 +86,19 @@ function LoginPage() {
       {/* Formulário */}
       <main className="relative flex flex-1 items-start justify-center px-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-8 lg:items-center lg:py-16">
         <div className="rise -mt-10 w-full max-w-[400px] lg:mt-0">
-          <div className="rounded-2xl border border-white/10 bg-[#0f1f3a]/90 p-6 shadow-2xl shadow-[#020617]/60 backdrop-blur-xl sm:p-9 lg:border-[#93c5fd]/10 lg:bg-[#0f1f3a]">
-            <h1 className="font-['Playfair_Display',Georgia,serif] text-2xl tracking-tight sm:text-3xl">
+          <div className="rounded-xl border border-[#c4a574] bg-[#2B2119] p-6 sm:p-9">
+            <h1 className="font-['Playfair_Display',Georgia,serif] text-2xl tracking-tight text-white sm:text-3xl">
               Acesse sua conta
             </h1>
-            <p className="mt-2 text-sm text-white/50">
+            <p className="mt-2 text-sm text-[#c4a574]">
               Entre com as credenciais fornecidas pelo escritório.
             </p>
 
             <form onSubmit={enviar} className="mt-8 space-y-5" noValidate>
               <label className="grid gap-2">
-                <span className="text-xs font-medium tracking-wide text-white/60">E-mail</span>
+                <span className="text-xs font-medium tracking-wide text-[#c4a574]">E-mail</span>
                 <span className="relative">
-                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/35" />
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#c4a574]" />
                   <input
                     ref={emailRef}
                     type="email"
@@ -132,9 +119,9 @@ function LoginPage() {
               </label>
 
               <label className="grid gap-2">
-                <span className="text-xs font-medium tracking-wide text-white/60">Senha</span>
+                <span className="text-xs font-medium tracking-wide text-[#c4a574]">Senha</span>
                 <span className="relative">
-                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/35" />
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#c4a574]" />
                   <input
                     type={verSenha ? "text" : "password"}
                     autoComplete="current-password"
@@ -151,7 +138,7 @@ function LoginPage() {
                     type="button"
                     onClick={() => setVerSenha((v) => !v)}
                     aria-label={verSenha ? "Ocultar senha" : "Mostrar senha"}
-                    className="absolute right-1.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-md text-white/40 transition-colors hover:text-white"
+                    className="absolute right-1.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-md text-[#c4a574] transition-colors hover:text-white"
                   >
                     {verSenha ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                   </button>
@@ -161,7 +148,7 @@ function LoginPage() {
               {erro && (
                 <p
                   role="alert"
-                  className="rounded-lg border border-[#e5484d]/30 bg-[#e5484d]/10 px-3 py-2.5 text-xs font-medium text-[#ff8589]"
+                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-800"
                 >
                   {erro}
                 </p>
@@ -170,20 +157,20 @@ function LoginPage() {
               <button
                 type="submit"
                 disabled={enviando}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-[#3b82f6] to-[#1d4ed8] text-sm font-semibold tracking-wide text-white shadow-lg shadow-[#1d4ed8]/30 transition-[filter,transform] hover:brightness-110 active:scale-[0.99] disabled:opacity-70"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-[#c4a574] bg-[#c4a574] text-sm font-semibold tracking-wide text-[#2B2119] transition-colors hover:bg-[#d4b88a] hover:border-[#d4b88a] active:bg-[#b8956a] disabled:opacity-70"
               >
                 {enviando && <Loader2 className="size-4 animate-spin" />}
                 Entrar
               </button>
             </form>
 
-            <div className="mt-7 flex items-start gap-2.5 border-t border-[#93c5fd]/10 pt-5 text-xs text-white/40">
-              <ShieldCheck className="size-4 shrink-0 text-[#60a5fa]/70" />
+            <div className="mt-7 flex items-start gap-2.5 border-t border-[#c4a574] pt-5 text-xs text-white/70">
+              <ShieldCheck className="size-4 shrink-0 text-[#c4a574]" />
               <span>Esqueceu a senha? Solicite a redefinição ao administrador do escritório.</span>
             </div>
           </div>
 
-          <p className="mt-6 text-center text-[11px] tracking-wide text-white/25">
+          <p className="mt-6 text-center text-[11px] tracking-wide text-[#c4a574]/70">
             © {ano} {identidade.nomeEscritorio}
           </p>
         </div>
