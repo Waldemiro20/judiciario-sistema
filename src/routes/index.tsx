@@ -1,26 +1,26 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
-  ArrowDown,
-  ArrowUp,
+  AlertTriangle,
+  Briefcase,
   Check,
-  Eye,
-  EyeOff,
-  GripVertical,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
   Plus,
   RotateCcw,
-  Settings2,
   Trash2,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { Avatar, Chip, Empty, Field, inputCls, Panel, selectCls, Stat } from "@/components/kit";
+import { Avatar, Chip, Empty, Field, inputCls, Panel, selectCls } from "@/components/kit";
 import {
   NovaTarefaDialog,
   prazoInfo,
   TarefaDialog,
-  TarefaMenu,
   useAcoesTarefa,
 } from "@/components/TarefaDialog";
 import { Button } from "@/components/ui/button";
@@ -54,28 +54,30 @@ import {
   type Tarefa,
 } from "@/lib/data";
 import { usePendencias } from "@/lib/pendencias";
-import { useApp, type WidgetId } from "@/lib/store";
+import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
-
+ 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Dashboard — Gestão Jurídica" },
       {
         name: "description",
-        content: "Painel diário do escritório: tarefas, pendências, audiências e prazos.",
+        content: "Resumo do escritório: tarefas, agenda, audiências, pendências e intimações.",
       },
     ],
   }),
   component: Dashboard,
 });
-
+ 
+/* ----------------------------- utilidades ----------------------------- */
+ 
 function saudacao(hora: number) {
   if (hora >= 5 && hora < 12) return "Bom dia";
   if (hora >= 12 && hora < 18) return "Boa tarde";
   return "Boa noite";
 }
-
+ 
 const fmtAgora = (d: Date) => {
   const data = d.toLocaleDateString("pt-BR", {
     weekday: "long",
@@ -86,9 +88,8 @@ const fmtAgora = (d: Date) => {
   const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   return `${data} · ${hora}`;
 };
-
-/** Hora atual do aparelho, atualizada a cada minuto (só no navegador, para não
- *  divergir do horário do servidor na renderização inicial). */
+ 
+/** Hora atual do aparelho, atualizada a cada 30s (só no navegador). */
 function useAgora() {
   const [agora, setAgora] = useState<Date | null>(null);
   useEffect(() => {
@@ -98,202 +99,617 @@ function useAgora() {
   }, []);
   return agora;
 }
-
+ 
+const coluna = (t: Tarefa) => t.coluna as string;
+const concluida = (t: Tarefa) => coluna(t) === "Concluído";
+const atrasada = (t: Tarefa) => !concluida(t) && diasAte(t.prazo) < 0;
+const dois = (n: number) => String(n).padStart(2, "0");
+ 
+type Oc = ReturnType<typeof ocorrencias>[number];
+type Foco = "abertas" | "atrasadas" | "concluidas";
+ 
+const MAX_ITENS = 5;
+ 
+/* ------------------------------- página ------------------------------- */
+ 
 function Dashboard() {
-  const { usuario, widgets, setWidgets } = useApp();
-  const [editando, setEditando] = useState(false);
-  const [arrastando, setArrastando] = useState<WidgetId | null>(null);
+  const { usuario, usuarios, tarefas, eventos, processos, clientes } = useApp();
+  const [quem, setQuem] = useState<string>("minhas");
+  const [foco, setFoco] = useState<Foco>("abertas");
   const [tarefaAberta, setTarefaAberta] = useState<string | null>(null);
   const [criarTarefa, setCriarTarefa] = useState(false);
-
-  const primeiroNome = usuario.split(" ")[0];
+ 
   const agora = useAgora();
-  const mover = (id: WidgetId, delta: number) =>
-    setWidgets((prev) => {
-      const i = prev.findIndex((w) => w.id === id);
-      const j = i + delta;
-      if (j < 0 || j >= prev.length) return prev;
-      const copia = [...prev];
-      [copia[i], copia[j]] = [copia[j]!, copia[i]!];
-      return copia;
-    });
-
-  const soltarSobre = (alvo: WidgetId) => {
-    if (!arrastando || arrastando === alvo) return;
-    setWidgets((prev) => {
-      const origem = prev.find((w) => w.id === arrastando)!;
-      const sem = prev.filter((w) => w.id !== arrastando);
-      const idx = sem.findIndex((w) => w.id === alvo);
-      sem.splice(idx, 0, origem);
-      return sem;
-    });
-  };
-
-  const render: Record<WidgetId, () => React.ReactNode> = {
-    resumo: () => <Resumo />,
-    pendencias: () => <Pendencias />,
-    agenda: () => <ProximosEventos />,
-    tarefas: () => <MinhasTarefas onAbrir={setTarefaAberta} onNova={() => setCriarTarefa(true)} />,
-    intimacoes: () => <Intimacoes />,
-    equipe: () => <CargaEquipe />,
-  };
-
-  const largos: WidgetId[] = ["resumo", "pendencias"];
-
+  const primeiroNome = usuario.split(" ")[0];
+ 
+  const base = useMemo(() => {
+    if (quem === "todos") return tarefas;
+    const nome = quem === "minhas" ? usuario : quem;
+    return tarefas.filter((t) => t.responsavel === nome);
+  }, [tarefas, quem, usuario]);
+ 
+  const nAtrasadas = base.filter(atrasada).length;
+  const nConcluidas = base.filter(concluida).length;
+  const processosAtivos = processos.filter((p) => p.status !== "Arquivado").length;
+ 
+  // Próximos compromissos (45 dias), em ordem de data e hora.
+  const proximos = useMemo(() => {
+    const ini = parseISO(HOJE);
+    const fim = new Date(ini.getTime() + 45 * 86_400_000);
+    return ocorrencias(eventos, ini, fim).sort(
+      (a, b) => a.data.localeCompare(b.data) || a.evento.hora.localeCompare(b.evento.hora),
+    );
+  }, [eventos]);
+  const audiencias = proximos.filter((o) => (o.evento.tipo as string) === "Audiência");
+  const agenda = proximos.filter((o) => (o.evento.tipo as string) !== "Audiência");
+ 
   return (
     <AppShell
       title={agora ? `${saudacao(agora.getHours())}, ${primeiroNome}` : `Olá, ${primeiroNome}`}
       subtitle={agora ? fmtAgora(agora) : ""}
     >
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          Aqui está o que precisa da sua atenção hoje.
-        </p>
-        <Button
-          variant={editando ? "default" : "outline"}
-          size="sm"
-          onClick={() => setEditando((e) => !e)}
-        >
-          {editando ? <Check className="size-4" /> : <Settings2 className="size-4" />}
-          {editando ? "Concluir" : "Personalizar painel"}
-        </Button>
-      </div>
-
-      {editando && (
-        <div className="glass-panel mb-5 rounded-2xl p-3">
-          <p className="mb-2 px-1 text-xs text-muted-foreground">
-            Arraste para reordenar, use as setas ou o olho para mostrar/ocultar blocos.
-          </p>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-            {widgets.map((w, i) => (
-              <div
-                key={w.id}
-                draggable
-                onDragStart={() => setArrastando(w.id)}
-                onDragEnd={() => setArrastando(null)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => soltarSobre(w.id)}
-                className={cn(
-                  "flex cursor-grab items-center gap-2 rounded-lg border border-border bg-background/60 px-2 py-2 text-sm",
-                  arrastando === w.id && "opacity-50",
-                  !w.visivel && "text-muted-foreground",
-                )}
+      <div className="space-y-4 sm:space-y-5">
+        {/* Topo: filtro + indicadores à esquerda, calendário pequeno à direita */}
+        <div className="grid grid-cols-1 items-start gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_200px]">
+          <div className="min-w-0 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="filtro-quem" className="text-xs font-medium text-muted-foreground">
+                Filtro
+              </label>
+              <select
+                id="filtro-quem"
+                className={cn(selectCls, "h-9 w-auto min-w-0 max-w-full text-sm")}
+                value={quem}
+                onChange={(e) => setQuem(e.target.value)}
               >
-                <GripVertical className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">{w.titulo}</span>
-                <button
-                  aria-label="Subir"
-                  onClick={() => mover(w.id, -1)}
-                  disabled={i === 0}
-                  className="rounded p-1 hover:bg-accent disabled:opacity-30"
-                >
-                  <ArrowUp className="size-3.5" />
-                </button>
-                <button
-                  aria-label="Descer"
-                  onClick={() => mover(w.id, 1)}
-                  disabled={i === widgets.length - 1}
-                  className="rounded p-1 hover:bg-accent disabled:opacity-30"
-                >
-                  <ArrowDown className="size-3.5" />
-                </button>
-                <button
-                  aria-label={w.visivel ? "Ocultar" : "Mostrar"}
-                  onClick={() =>
-                    setWidgets((prev) =>
-                      prev.map((x) => (x.id === w.id ? { ...x, visivel: !x.visivel } : x)),
-                    )
-                  }
-                  className="rounded p-1 hover:bg-accent"
-                >
-                  {w.visivel ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {widgets
-          .filter((w) => w.visivel)
-          .map((w) => (
-            <div key={w.id} className={cn("min-w-0", largos.includes(w.id) && "lg:col-span-2")}>
-              {render[w.id]()}
+                <option value="minhas">Minhas tarefas</option>
+                <option value="todos">Toda a equipe</option>
+                {usuarios
+                  .filter((u) => u.nome !== usuario)
+                  .map((u) => (
+                    <option key={u.nome} value={u.nome}>
+                      {u.nome}
+                    </option>
+                  ))}
+              </select>
+              <Button size="sm" className="ml-auto h-9" onClick={() => setCriarTarefa(true)}>
+                <Plus className="size-4" /> Nova tarefa
+              </Button>
             </div>
-          ))}
+ 
+            <section className="grid grid-cols-2 gap-3">
+              <Kpi
+                icon={Briefcase}
+                label="Processos em andamento"
+                valor={String(processosAtivos)}
+                cor="primary"
+                to="/processos"
+              />
+              <Kpi
+                icon={Users}
+                label="Clientes cadastrados"
+                valor={String(clientes.length)}
+                cor="primary"
+                to="/clientes"
+              />
+              <Kpi
+                icon={AlertTriangle}
+                label="Tarefas atrasadas"
+                valor={String(nAtrasadas)}
+                cor="critical"
+                ativo={foco === "atrasadas"}
+                onClick={() => setFoco(foco === "atrasadas" ? "abertas" : "atrasadas")}
+              />
+              <Kpi
+                icon={CheckCircle2}
+                label="Tarefas concluídas"
+                valor={String(nConcluidas)}
+                cor="success"
+                ativo={foco === "concluidas"}
+                onClick={() => setFoco(foco === "concluidas" ? "abertas" : "concluidas")}
+              />
+            </section>
+          </div>
+ 
+          <aside className="min-w-0">
+            <MiniCalendario />
+          </aside>
+        </div>
+ 
+        {/* Três quadrados: tarefas, agenda e audiências */}
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <PainelTarefas
+            base={base}
+            foco={foco}
+            setFoco={setFoco}
+            onAbrir={setTarefaAberta}
+          />
+          <PainelEventos
+            titulo="Agenda"
+            destino="/agenda"
+            lista={agenda}
+            vazio="Nenhum compromisso próximo."
+          />
+          <div className="md:col-span-2 xl:col-span-1">
+            <PainelEventos
+              titulo="Audiências"
+              destino="/audiencias"
+              lista={audiencias}
+              vazio="Nenhuma audiência marcada."
+            />
+          </div>
+        </section>
+ 
+        <BlocoInferior quem={quem} onEscolher={setQuem} />
       </div>
-
+ 
       <TarefaDialog tarefaId={tarefaAberta} onOpenChange={(o) => !o && setTarefaAberta(null)} />
       <NovaTarefaDialog open={criarTarefa} onOpenChange={setCriarTarefa} />
     </AppShell>
   );
 }
-
-function Resumo() {
-  const { processos, clientes, tarefas, eventos, usuario } = useApp();
-  const ativos = processos.filter((p) => p.status !== "Arquivado").length;
-  const minhas = tarefas.filter((t) => t.coluna !== "Concluído" && t.responsavel === usuario);
-  const atrasadas = minhas.filter((t) => diasAte(t.prazo) < 0).length;
-  const proximos = ocorrencias(eventos, parseISO(HOJE), new Date(2024, 3, 11)).filter(
-    (o) => o.evento.tipo !== "Reunião",
+ 
+/* ------------------------------ indicadores ------------------------------ */
+ 
+const corKpi = {
+  warning: { borda: "border-[var(--warning)]", icone: "text-[var(--warning)]" },
+  primary: { borda: "border-primary", icone: "text-primary" },
+  critical: { borda: "border-[var(--critical)]", icone: "text-[var(--critical)]" },
+  success: { borda: "border-[var(--success)]", icone: "text-[var(--success)]" },
+} as const;
+ 
+function Kpi({
+  icon: Icon,
+  label,
+  valor,
+  cor,
+  ativo,
+  onClick,
+  to,
+}: {
+  icon: LucideIcon;
+  label: string;
+  valor: string;
+  cor: keyof typeof corKpi;
+  ativo?: boolean | undefined;
+  onClick?: (() => void) | undefined;
+  to?: string | undefined;
+}) {
+  const c = corKpi[cor];
+  const cls = cn(
+    "glass-panel flex w-full min-w-0 items-center gap-3 rounded-2xl border-2 p-3 text-left transition sm:p-4",
+    c.borda,
+    (onClick || to) && "hover:-translate-y-0.5",
+    ativo && "ring-2 ring-current ring-offset-2 ring-offset-background",
+    ativo && c.icone,
   );
-
+  const conteudo = (
+    <>
+      <Icon className={cn("size-7 shrink-0 sm:size-8", c.icone)} />
+      <span className="min-w-0 text-foreground">
+        <span className="block truncate text-xs text-muted-foreground">{label}</span>
+        <span className="block text-xl font-bold leading-tight tracking-tight sm:text-2xl">
+          {valor}
+        </span>
+      </span>
+    </>
+  );
+ 
+  if (to) {
+    return (
+      <Link to={to} className={cls}>
+        {conteudo}
+      </Link>
+    );
+  }
+  if (onClick) {
+    return (
+      <button onClick={onClick} className={cls}>
+        {conteudo}
+      </button>
+    );
+  }
+  return <div className={cls}>{conteudo}</div>;
+}
+ 
+/* ------------------------------ quadrado: tarefas ------------------------------ */
+ 
+const FILTROS: { id: Foco; label: string }[] = [
+  { id: "abertas", label: "Em aberto" },
+  { id: "atrasadas", label: "Atrasadas" },
+  { id: "concluidas", label: "Concluídas" },
+];
+ 
+function PainelTarefas({
+  base,
+  foco,
+  setFoco,
+  onAbrir,
+}: {
+  base: Tarefa[];
+  foco: Foco;
+  setFoco: (f: Foco) => void;
+  onAbrir: (id: string) => void;
+}) {
+  const { alternarConclusao } = useAcoesTarefa();
+ 
+  const lista = base
+    .filter((t) =>
+      foco === "atrasadas" ? atrasada(t) : foco === "concluidas" ? concluida(t) : !concluida(t),
+    )
+    .sort((a, b) => Number(atrasada(b)) - Number(atrasada(a)) || a.prazo.localeCompare(b.prazo));
+ 
   return (
-    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-      <Stat
-        label="Processos em andamento"
-        value={ativos}
-        note={`${processos.length} cadastrados no total`}
-        delay={0}
-      />
-      <Stat
-        label="Clientes cadastrados"
-        value={clientes.length}
-        note={`${clientes.filter((c) => c.status === "Ativo").length} ativos`}
-        delay={60}
-      />
-      <Stat
-        label="Minhas tarefas pendentes"
-        value={minhas.length}
-        note={atrasadas ? `${atrasadas} atrasada${atrasadas > 1 ? "s" : ""}` : "nenhuma atrasada"}
-        tone={atrasadas ? "warning" : "success"}
-        delay={120}
-      />
-      <Stat
-        label="Prazos e audiências (48h)"
-        value={proximos.length}
-        note="hoje e amanhã — atenção"
-        tone="critical"
-        delay={180}
-      />
-    </div>
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          Tarefas
+          <span className="text-[11px] font-normal text-muted-foreground">{lista.length}</span>
+        </span>
+      }
+      action={
+        <Link
+          to="/tarefas"
+          className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        >
+          Ver tudo →
+        </Link>
+      }
+      delay={80}
+    >
+      <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+        {FILTROS.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFoco(f.id)}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              foco === f.id
+                ? "border-primary bg-[var(--brand-soft)] text-[var(--brand-soft-foreground)]"
+                : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+ 
+      <div className="mt-2 divide-y divide-border">
+        {lista.length === 0 && <Empty>Nada por aqui.</Empty>}
+        {lista.slice(0, MAX_ITENS).map((t) => {
+          const feita = concluida(t);
+          const p = prazoInfo(t);
+          return (
+            <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent/50">
+              <Avatar nome={t.responsavel} />
+              <button onClick={() => onAbrir(t.id)} className="min-w-0 flex-1 text-left">
+                <span
+                  className={cn(
+                    "block truncate text-sm",
+                    feita ? "text-muted-foreground line-through" : "font-medium",
+                  )}
+                >
+                  {t.titulo}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {t.vinculo}
+                </span>
+              </button>
+              {!feita && (
+                <Chip tone={p.tone} className="hidden shrink-0 sm:inline-flex">
+                  {p.label}
+                </Chip>
+              )}
+              <button
+                aria-label={feita ? "Reabrir tarefa" : "Concluir tarefa"}
+                onClick={() => alternarConclusao(t)}
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-full border-2",
+                  feita
+                    ? "border-[var(--success)] bg-[var(--success)]"
+                    : "border-muted-foreground/50 hover:border-[var(--success)]",
+                )}
+              >
+                {feita && <Check className="size-3 text-background" strokeWidth={4} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {lista.length > MAX_ITENS && (
+        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+          + {lista.length - MAX_ITENS} tarefa{lista.length - MAX_ITENS > 1 ? "s" : ""} em "Ver
+          tudo".
+        </p>
+      )}
+    </Panel>
   );
 }
-
-const nivelTone = { critico: "critical", atencao: "warning", info: "brand" } as const;
-const nivelLabel = { critico: "Urgente", atencao: "Atenção", info: "Aviso" } as const;
-
-function Pendencias() {
-  const pendencias = usePendencias();
+ 
+/* ------------------------ quadrados: agenda e audiências ------------------------ */
+ 
+function PainelEventos({
+  titulo,
+  destino,
+  lista,
+  vazio,
+}: {
+  titulo: string;
+  destino: string;
+  lista: Oc[];
+  vazio: string;
+}) {
   const navigate = useNavigate();
   return (
     <Panel
       title={
         <span className="flex items-center gap-2">
-          Pendências que precisam de atenção
-          <Chip tone={pendencias.some((p) => p.nivel === "critico") ? "critical" : "warning"}>
-            {pendencias.length}
-          </Chip>
+          {titulo}
+          <span className="text-[11px] font-normal text-muted-foreground">{lista.length}</span>
         </span>
       }
-      delay={80}
+      action={
+        <Link
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          to={destino as any}
+          className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        >
+          Ver tudo →
+        </Link>
+      }
+      delay={100}
     >
+      <div className="divide-y divide-border">
+        {lista.length === 0 && <Empty>{vazio}</Empty>}
+        {lista.slice(0, MAX_ITENS).map(({ evento: e, data }) => {
+          const d = diasAte(data);
+          const tone = tipoTone[e.tipo];
+          return (
+            <button
+              key={e.id + data}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onClick={() => navigate({ to: destino as any })}
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent/50"
+            >
+              <div
+                className={cn(
+                  "w-12 shrink-0 rounded-lg py-1.5 text-center font-mono text-[11px] leading-tight",
+                  tone.bg,
+                  tone.text,
+                )}
+              >
+                {fmtDM(data)}
+                <br />
+                {e.hora}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium leading-tight">{e.titulo}</div>
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {e.local} · {e.advogado}
+                </div>
+              </div>
+              <Chip
+                tone={d <= 0 ? "critical" : d === 1 ? "warning" : "neutral"}
+                className="hidden shrink-0 sm:inline-flex"
+              >
+                {d <= 0 ? "Hoje" : d === 1 ? "Amanhã" : `${d} dias`}
+              </Chip>
+            </button>
+          );
+        })}
+      </div>
+      {lista.length > MAX_ITENS && (
+        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+          + {lista.length - MAX_ITENS} em "Ver tudo".
+        </p>
+      )}
+    </Panel>
+  );
+}
+ 
+/* ------------------------------ mini calendário ------------------------------ */
+ 
+const DIAS_SEMANA = ["D", "S", "T", "Q", "Q", "S", "S"];
+const pontoTipo: Record<string, string> = {
+  Audiência: "bg-[var(--critical)]",
+  Prazo: "bg-[var(--warning)]",
+  Reunião: "bg-primary",
+};
+ 
+function MiniCalendario() {
+  const { eventos } = useApp();
+  const navigate = useNavigate();
+  const hoje = parseISO(HOJE);
+  const [mes, setMes] = useState({ a: hoje.getFullYear(), m: hoje.getMonth() });
+  const [sel, setSel] = useState<string>(HOJE.slice(0, 10));
+ 
+  const primeiro = new Date(mes.a, mes.m, 1);
+  const ultimo = new Date(mes.a, mes.m + 1, 0);
+  const iso = (d: number) => `${mes.a}-${dois(mes.m + 1)}-${dois(d)}`;
+ 
+  const ocs = useMemo(
+    () => ocorrencias(eventos, primeiro, ultimo),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [eventos, mes.a, mes.m],
+  );
+ 
+  const porDia = new Map<string, typeof ocs>();
+  ocs.forEach((o) => {
+    const k = o.data.slice(0, 10);
+    porDia.set(k, [...(porDia.get(k) ?? []), o]);
+  });
+ 
+  const celulas: (number | null)[] = [
+    ...Array<null>(primeiro.getDay()).fill(null),
+    ...Array.from({ length: ultimo.getDate() }, (_, i) => i + 1),
+  ];
+ 
+  const doDia = porDia.get(sel) ?? [];
+  const nomeMes = primeiro.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+ 
+  const mudarMes = (delta: number) => {
+    const d = new Date(mes.a, mes.m + delta, 1);
+    setMes({ a: d.getFullYear(), m: d.getMonth() });
+  };
+ 
+  return (
+    <Panel
+      title={<span className="text-sm capitalize">{nomeMes}</span>}
+      action={
+        <>
+          <button
+            aria-label="Mês anterior"
+            onClick={() => mudarMes(-1)}
+            className="rounded p-1 hover:bg-accent"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+          <button
+            aria-label="Próximo mês"
+            onClick={() => mudarMes(1)}
+            className="rounded p-1 hover:bg-accent"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+        </>
+      }
+      delay={60}
+    >
+      <div className="p-2.5">
+        <div className="grid grid-cols-7 gap-y-0.5 text-center text-[10px] text-muted-foreground">
+          {DIAS_SEMANA.map((d, i) => (
+            <span key={i}>{d}</span>
+          ))}
+          {celulas.map((d, i) => {
+            if (d === null) return <span key={i} />;
+            const k = iso(d);
+            const eventosDia = porDia.get(k);
+            const ehHoje = k === HOJE.slice(0, 10);
+            return (
+              <button
+                key={i}
+                onClick={() => setSel(k)}
+                aria-label={`Dia ${d}`}
+                className={cn(
+                  "relative mx-auto grid size-7 place-items-center rounded-full text-[11px] transition-colors",
+                  k === sel
+                    ? "bg-primary text-primary-foreground"
+                    : ehHoje
+                      ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand-soft-foreground)]"
+                      : "text-foreground hover:bg-accent",
+                )}
+              >
+                {d}
+                {eventosDia && (
+                  <span
+                    className={cn(
+                      "absolute bottom-0.5 size-1 rounded-full",
+                      k === sel
+                        ? "bg-primary-foreground"
+                        : (pontoTipo[eventosDia[0]!.evento.tipo as string] ?? "bg-primary"),
+                    )}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+ 
+        <div className="mt-2.5 space-y-0.5 border-t border-border pt-2.5">
+          {doDia.length === 0 && (
+            <p className="px-1 text-[11px] text-muted-foreground">Nada marcado neste dia.</p>
+          )}
+          {doDia.slice(0, 3).map(({ evento: e, data }) => (
+            <button
+              key={e.id + data}
+              onClick={() => navigate({ to: "/agenda" })}
+              className="flex w-full items-start gap-2 rounded-md p-1 text-left hover:bg-accent"
+            >
+              <span
+                className={cn(
+                  "mt-1.5 size-1.5 shrink-0 rounded-full",
+                  pontoTipo[e.tipo as string] ?? "bg-primary",
+                )}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium">{e.titulo}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {e.hora} · {e.tipo}
+                </span>
+              </span>
+            </button>
+          ))}
+          {doDia.length > 3 && (
+            <Link
+              to="/agenda"
+              className="block px-1 pt-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              + {doDia.length - 3} no dia →
+            </Link>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+ 
+/* ---------------- pendências, intimações e equipe (abas) ---------------- */
+ 
+type AbaInferior = "pendencias" | "intimacoes" | "equipe";
+ 
+function BlocoInferior({ quem, onEscolher }: { quem: string; onEscolher: (n: string) => void }) {
+  const pendencias = usePendencias();
+  const { intimacoes } = useApp();
+  const [aba, setAba] = useState<AbaInferior>("pendencias");
+  const intimPend = intimacoes.filter((i) => !i.concluida).length;
+ 
+  const abas: { id: AbaInferior; label: string; n?: number }[] = [
+    { id: "pendencias", label: "Pendências", n: pendencias.length },
+    { id: "intimacoes", label: "Intimações", n: intimPend },
+    { id: "equipe", label: "Equipe" },
+  ];
+ 
+  return (
+    <section>
+      <div className="mb-3 flex w-fit gap-1 rounded-lg bg-accent p-0.5 text-xs font-medium">
+        {abas.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => setAba(a.id)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors",
+              aba === a.id ? "glass-soft text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            {a.label}
+            {a.n !== undefined && a.n > 0 && (
+              <span className="rounded bg-[var(--warning-soft)] px-1.5 text-[10px] text-[var(--warning)]">
+                {a.n}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      {aba === "pendencias" && <Pendencias />}
+      {aba === "intimacoes" && <Intimacoes />}
+      {aba === "equipe" && <ResumoEquipe quem={quem} onEscolher={onEscolher} />}
+    </section>
+  );
+}
+ 
+const nivelTone = { critico: "critical", atencao: "warning", info: "brand" } as const;
+const nivelLabel = { critico: "Urgente", atencao: "Atenção", info: "Aviso" } as const;
+ 
+function Pendencias() {
+  const pendencias = usePendencias();
+  const navigate = useNavigate();
+  return (
+    <Panel title="Pendências que precisam de atenção" delay={0}>
       {pendencias.length === 0 ? (
         <Empty>Tudo em dia. Nenhuma pendência para você.</Empty>
       ) : (
         <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-y-0">
-          {pendencias.slice(0, 8).map((p, i) => (
+          {pendencias.slice(0, 6).map((p, i) => (
             <button
               key={p.id}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -303,7 +719,7 @@ function Pendencias() {
                 i % 2 === 0 && "md:border-r",
               )}
             >
-              <Chip tone={nivelTone[p.nivel]} className="mt-0.5 w-16 justify-center">
+              <Chip tone={nivelTone[p.nivel]} className="mt-0.5 w-16 shrink-0 justify-center">
                 {nivelLabel[p.nivel]}
               </Chip>
               <span className="min-w-0">
@@ -319,145 +735,64 @@ function Pendencias() {
     </Panel>
   );
 }
-
-function ProximosEventos() {
-  const { eventos } = useApp();
-  const lista = ocorrencias(eventos, parseISO(HOJE), new Date(2024, 3, 30)).slice(0, 6);
+ 
+function ResumoEquipe({ quem, onEscolher }: { quem: string; onEscolher: (n: string) => void }) {
+  const { tarefas, usuarios } = useApp();
+  const dados = usuarios.map((u) => {
+    const dele = tarefas.filter((t) => t.responsavel === u.nome);
+    return {
+      nome: u.nome,
+      abertas: dele.filter((t) => !concluida(t)).length,
+      atrasadas: dele.filter(atrasada).length,
+      concluidas: dele.filter(concluida).length,
+    };
+  });
+ 
   return (
-    <Panel
-      title="Próximos prazos e audiências"
-      action={
-        <Link
-          to="/agenda"
-          className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
-        >
-          Ver agenda →
-        </Link>
-      }
-      delay={120}
-    >
-      <div className="divide-y divide-border">
-        {lista.map(({ evento: e, data }) => {
-          const d = diasAte(data);
-          const tone = tipoTone[e.tipo];
-          return (
-            <div key={e.id + data} className="flex items-start gap-3 px-4 py-3">
-              <div
-                className={cn(
-                  "w-12 shrink-0 rounded-lg py-1.5 text-center font-mono text-[11px] leading-tight",
-                  tone.bg,
-                  tone.text,
-                )}
-              >
-                {fmtDM(data)}
-                <br />
-                {e.hora}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium leading-tight">{e.titulo}</div>
-                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                  {e.tipo} · {e.local} · {e.advogado}
-                </div>
-              </div>
-              <Chip tone={d === 0 ? "critical" : d === 1 ? "warning" : "neutral"}>
-                {d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `${d} dias`}
-              </Chip>
-            </div>
-          );
-        })}
-      </div>
-    </Panel>
-  );
-}
-
-function MinhasTarefas({ onAbrir, onNova }: { onAbrir: (id: string) => void; onNova: () => void }) {
-  const { tarefas, usuario } = useApp();
-  const { alternarConclusao } = useAcoesTarefa();
-  const minhas = tarefas
-    .filter((t) => t.responsavel === usuario)
-    .sort(
-      (a, b) =>
-        Number(a.coluna === "Concluído") - Number(b.coluna === "Concluído") ||
-        a.prazo.localeCompare(b.prazo),
-    );
-  const concluidas = minhas.filter((t) => t.coluna === "Concluído").length;
-
-  return (
-    <Panel
-      title="Minhas tarefas"
-      action={
-        <>
-          <span className="font-mono text-[10px] text-muted-foreground">
-            {concluidas}/{minhas.length}
-          </span>
-          <Link
-            to="/tarefas"
-            className="hidden text-[11px] font-medium text-muted-foreground hover:text-foreground sm:inline"
+    <Panel title="Resumo da equipe" delay={0}>
+      <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+        {dados.map((d) => (
+          <button
+            key={d.nome}
+            onClick={() => onEscolher(quem === d.nome ? "minhas" : d.nome)}
+            className={cn(
+              "flex min-w-0 items-center gap-3 rounded-xl border border-border p-3 text-left transition-colors hover:bg-accent",
+              quem === d.nome && "border-primary bg-[var(--brand-soft)]",
+            )}
           >
-            Abrir quadro →
-          </Link>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={onNova}>
-            <Plus className="size-3.5" /> Nova
-          </Button>
-        </>
-      }
-      delay={160}
-    >
-      <div className="space-y-1 p-2">
-        {minhas.length === 0 && <Empty>Nenhuma tarefa atribuída a você.</Empty>}
-        {minhas.map((t) => {
-          const feita = t.coluna === "Concluído";
-          const p = prazoInfo(t);
-          return (
-            <div
-              key={t.id}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 transition-colors",
-                !feita && p.tone === "critical" ? "bg-[var(--critical-soft)]" : "hover:bg-accent",
-              )}
-            >
-              <button
-                aria-label={feita ? "Reabrir" : "Concluir"}
-                onClick={() => alternarConclusao(t)}
+            <Avatar nome={d.nome} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{d.nome}</span>
+              <span className="block text-[11px] text-muted-foreground">
+                {d.abertas} em aberto
+              </span>
+              <span
                 className={cn(
-                  "grid size-5 shrink-0 place-items-center rounded-full border-2",
-                  feita
-                    ? "border-[var(--success)] bg-[var(--success)]"
-                    : "border-muted-foreground/50 hover:border-[var(--success)]",
+                  "block text-[11px]",
+                  d.atrasadas ? "text-[var(--critical)]" : "text-muted-foreground",
                 )}
               >
-                {feita && <Check className="size-2.5 text-background" strokeWidth={4} />}
-              </button>
-              <button onClick={() => onAbrir(t.id)} className="min-w-0 flex-1 text-left">
-                <span
-                  className={cn(
-                    "block truncate text-sm",
-                    feita ? "text-muted-foreground line-through" : "font-medium",
-                  )}
-                >
-                  {t.titulo}
-                </span>
-                <span className="block truncate text-[11px] text-muted-foreground">
-                  {t.vinculo}
-                </span>
-              </button>
-              {!feita && <Chip tone={p.tone}>{p.label}</Chip>}
-              <TarefaMenu t={t} onEditar={() => onAbrir(t.id)} className="-mr-1 size-7" />
-            </div>
-          );
-        })}
+                {d.atrasadas} atrasada{d.atrasadas === 1 ? "" : "s"}
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                {d.concluidas} concluída{d.concluidas === 1 ? "" : "s"}
+              </span>
+            </span>
+          </button>
+        ))}
       </div>
     </Panel>
   );
 }
-
+ 
+/* ------------------------------- intimações ------------------------------- */
+ 
 function Intimacoes() {
   const { intimacoes, setIntimacoes, processos, registrar } = useApp();
   const [editando, setEditando] = useState<Intimacao | null>(null);
   const [criando, setCriando] = useState(false);
   const [apagando, setApagando] = useState<Intimacao | null>(null);
-  const pendentes = intimacoes.filter((i) => !i.concluida).length;
-
+ 
   const alternarConclusao = (i: Intimacao) => {
     const concluir = !i.concluida;
     setIntimacoes((prev) =>
@@ -470,7 +805,7 @@ function Intimacoes() {
     );
     toast.success(concluir ? "Intimação concluída" : "Intimação reaberta");
   };
-
+ 
   const apagar = (i: Intimacao) => {
     const indice = intimacoes.findIndex((x) => x.id === i.id);
     setIntimacoes((prev) => prev.filter((x) => x.id !== i.id));
@@ -488,7 +823,7 @@ function Intimacoes() {
       },
     });
   };
-
+ 
   const nova = () => {
     const { dataCurta, hora } = agoraCarimbo();
     setCriando(true);
@@ -501,7 +836,7 @@ function Intimacoes() {
       lida: false,
     });
   };
-
+ 
   const salvar = (i: Intimacao) => {
     if (criando) {
       setIntimacoes((prev) => [i, ...prev]);
@@ -515,23 +850,18 @@ function Intimacoes() {
     setEditando(null);
     setCriando(false);
   };
-
+ 
   return (
     <Panel
-      title={
-        <span className="flex items-center gap-2">
-          Novas intimações
-          {pendentes > 0 && <Chip tone="warning">{pendentes} pendentes</Chip>}
-        </span>
-      }
+      title="Novas intimações"
       action={
         <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={nova}>
           <Plus className="size-3.5" /> Nova
         </Button>
       }
-      delay={200}
+      delay={0}
     >
-      <div className="divide-y divide-border">
+      <div className="max-h-[420px] divide-y divide-border overflow-y-auto">
         {intimacoes.length === 0 && <Empty>Nenhuma intimação.</Empty>}
         {[...intimacoes]
           .sort((a, b) => Number(!!a.concluida) - Number(!!b.concluida))
@@ -587,7 +917,7 @@ function Intimacoes() {
             </div>
           ))}
       </div>
-
+ 
       <EditarIntimacaoDialog
         intimacao={editando}
         nova={criando}
@@ -599,7 +929,7 @@ function Intimacoes() {
         }}
         onSalvar={salvar}
       />
-
+ 
       <AlertDialog open={!!apagando} onOpenChange={(o) => !o && setApagando(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -624,7 +954,7 @@ function Intimacoes() {
     </Panel>
   );
 }
-
+ 
 function EditarIntimacaoDialog({
   intimacao,
   nova,
@@ -640,10 +970,10 @@ function EditarIntimacaoDialog({
 }) {
   const [f, setF] = useState<Intimacao | null>(intimacao);
   useEffect(() => setF(intimacao), [intimacao]);
-
+ 
   // Garante que o processo atual apareça na lista mesmo se não estiver cadastrado.
   const opcoes = f && !processos.includes(f.processo) ? [f.processo, ...processos] : processos;
-
+ 
   return (
     <Dialog open={!!intimacao} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -707,36 +1037,4 @@ function EditarIntimacaoDialog({
     </Dialog>
   );
 }
-
-function CargaEquipe() {
-  const { tarefas, usuarios } = useApp();
-  const dados = usuarios.map((u) => {
-    const abertas = tarefas.filter((t) => t.responsavel === u.nome && t.coluna !== "Concluído");
-    return {
-      nome: u.nome,
-      abertas: abertas.length,
-      atrasadas: abertas.filter((t) => diasAte(t.prazo) < 0).length,
-    };
-  });
-  const max = Math.max(1, ...dados.map((d) => d.abertas));
-  return (
-    <Panel title="Carga da equipe" delay={240}>
-      <div className="space-y-3 p-4">
-        {dados.map((d) => (
-          <div key={d.nome} className="flex items-center gap-3">
-            <Avatar nome={d.nome} />
-            <span className="w-32 shrink-0 truncate text-sm">{d.nome}</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-accent">
-              <div
-                className="h-full rounded-full bg-primary"
-                style={{ width: `${(d.abertas / max) * 100}%` }}
-              />
-            </div>
-            <span className="w-6 text-right font-mono text-xs">{d.abertas}</span>
-            {d.atrasadas > 0 && <Chip tone="critical">{d.atrasadas} atr.</Chip>}
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
+ 
