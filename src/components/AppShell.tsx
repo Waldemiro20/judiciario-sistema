@@ -193,6 +193,7 @@ function Notificacoes() {
           </span>
         )}
       </PopoverTrigger>
+      
       <PopoverContent align="end" className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-border px-4 py-3">
           <div className="text-sm font-semibold">Pendências</div>
