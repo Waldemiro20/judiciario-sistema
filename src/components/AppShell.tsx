@@ -40,7 +40,11 @@ import {
 } from "@/components/ui/command";
 import { useApp } from "@/lib/store";
 import { usePendencias } from "@/lib/pendencias";
+<<<<<<< HEAD
 import { iniciais, PERFIS_DEMO, ROLE_LABEL, type Modulo } from "@/lib/data";
+=======
+import { diasAte, fmtDM, iniciais, PERFIS_DEMO, ROLE_LABEL, type Modulo } from "@/lib/data";
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
 import { cn } from "@/lib/utils";
 
 type NavItem = { to: string; label: Modulo; icon: LucideIcon };
@@ -88,7 +92,11 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         if (!itens.length) return null;
         return (
           <div key={g.grupo}>
+<<<<<<< HEAD
             <div className="mb-1 px-3 text-[11px] font-medium text-muted-foreground/70">
+=======
+            <div className="mb-1 px-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
               {g.grupo}
             </div>
             <div className="space-y-0.5">
@@ -112,7 +120,11 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                     {item.label === "Tarefas" && minhasPendentes > 0 && (
                       <span
                         className={cn(
+<<<<<<< HEAD
                           "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold",
+=======
+                          "ml-auto rounded px-1.5 py-0.5 font-mono text-[10px]",
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
                           active
                             ? "bg-primary-foreground/20"
                             : "bg-[var(--warning-soft)] text-[var(--warning)]",
@@ -121,6 +133,19 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                         {minhasPendentes}
                       </span>
                     )}
+<<<<<<< HEAD
+=======
+                    {item.label === "Financeiro" && (
+                      <span
+                        className={cn(
+                          "ml-auto font-mono text-[10px]",
+                          active ? "text-primary-foreground/70" : "text-muted-foreground/60",
+                        )}
+                      >
+                        restrito
+                      </span>
+                    )}
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
                   </Link>
                 );
               })}
@@ -134,6 +159,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
 function Brand() {
   const { identidade } = useApp();
+<<<<<<< HEAD
   const [logoErro, setLogoErro] = useState(false);
 
   return (
@@ -159,6 +185,44 @@ function Brand() {
           ADVOCACIA
         </span>
       </div>
+=======
+  return (
+    <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-border px-5">
+      <div className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
+        {identidade.sigla}
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold leading-none tracking-tight">
+          {identidade.nomeEscritorio}
+        </div>
+        <div className="mt-1 truncate font-mono text-[10px] tracking-wide text-muted-foreground">
+          GESTÃO DO ESCRITÓRIO
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SidebarFooterCard() {
+  const { eventos, usuario } = useApp();
+  const proxima = [...eventos]
+    .filter((e) => e.tipo === "Audiência" && diasAte(e.data) >= 0)
+    .sort((a, b) => (a.data + a.hora).localeCompare(b.data + b.hora))[0];
+  if (!proxima) return null;
+  return (
+    <div className="shrink-0 p-3">
+      <Link
+        to="/audiencias"
+        className="glass-soft block rounded-xl border border-border p-3 transition-colors hover:bg-accent"
+      >
+        <div className="text-xs font-medium">Próxima audiência</div>
+        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+          {fmtDM(proxima.data)} · {proxima.hora}
+          {proxima.advogado === usuario && " · você"}
+        </div>
+        <div className="mt-2 line-clamp-2 text-[11px] text-muted-foreground">{proxima.titulo}</div>
+      </Link>
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
     </div>
   );
 }
@@ -185,7 +249,11 @@ function Notificacoes() {
         {pendencias.length > 0 && (
           <span
             className={cn(
+<<<<<<< HEAD
               "absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white",
+=======
+              "absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 font-mono text-[9px] font-bold text-white",
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
               criticas ? "bg-[var(--critical)]" : "bg-[var(--warning)]",
             )}
           >
@@ -193,7 +261,10 @@ function Notificacoes() {
           </span>
         )}
       </PopoverTrigger>
+<<<<<<< HEAD
       
+=======
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
       <PopoverContent align="end" className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-border px-4 py-3">
           <div className="text-sm font-semibold">Pendências</div>
@@ -257,11 +328,23 @@ function BuscaGlobal() {
     <>
       <button
         onClick={() => setOpen(true)}
+<<<<<<< HEAD
         aria-label="Buscar"
         className="flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-xs text-muted-foreground transition-colors hover:bg-accent/70 lg:w-56"
       >
         <Search className="size-4 shrink-0" />
         <span className="hidden truncate whitespace-nowrap lg:inline">Buscar…</span>
+=======
+        className="flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-xs text-muted-foreground transition-colors hover:bg-accent/70 lg:w-64"
+      >
+        <Search className="size-4 shrink-0" />
+        <span className="hidden truncate whitespace-nowrap lg:inline">
+          Buscar cliente, processo…
+        </span>
+        <kbd className="ml-auto hidden shrink-0 whitespace-nowrap rounded border border-border px-1.5 font-mono text-[10px] lg:inline">
+          Ctrl K
+        </kbd>
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
       </button>
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder="Digite nome, CPF/CNPJ, nº do processo…" />
@@ -405,10 +488,23 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh w-full bg-background font-sans text-foreground antialiased">
+<<<<<<< HEAD
+=======
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -left-24 -top-32 h-[420px] w-[420px] rounded-full bg-primary/15 blur-3xl" />
+        <div className="absolute -right-20 top-1/3 h-[380px] w-[380px] rounded-full bg-[var(--brand-soft)] blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-[300px] w-[300px] rounded-full bg-primary/10 blur-3xl" />
+      </div>
+
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
       <div className="flex min-h-dvh">
         <aside className="glass-bar sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border md:flex">
           <Brand />
           <NavList />
+<<<<<<< HEAD
+=======
+          <SidebarFooterCard />
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -429,7 +525,11 @@ export function AppShell({
                 {title}
               </h1>
               {subtitle && (
+<<<<<<< HEAD
                 <p className="mt-1 hidden truncate text-xs text-muted-foreground sm:block">
+=======
+                <p className="mt-1 hidden truncate font-mono text-[11px] text-muted-foreground sm:block">
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
                   {subtitle}
                 </p>
               )}
@@ -441,7 +541,11 @@ export function AppShell({
               <button
                 onClick={toggleTheme}
                 aria-label="Alternar tema"
+<<<<<<< HEAD
                 className="hidden size-9 place-items-center rounded-lg bg-accent text-foreground/70 transition-colors hover:bg-accent/70 sm:grid"
+=======
+                className="hidden size-9 place-items-center sm:grid rounded-lg bg-accent text-foreground/70 transition-colors hover:bg-accent/70"
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
               >
                 {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
               </button>
@@ -457,4 +561,8 @@ export function AppShell({
       </div>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e

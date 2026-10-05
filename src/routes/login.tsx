@@ -24,7 +24,10 @@ function LoginPage() {
   const [verSenha, setVerSenha] = useState(false);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+<<<<<<< HEAD
   const [logoErro, setLogoErro] = useState(false);
+=======
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,6 +72,7 @@ function LoginPage() {
 
         <div className="absolute inset-0 z-10 flex items-center justify-center p-6 pt-[max(1.5rem,env(safe-area-inset-top))] sm:p-10 lg:p-14">
           <div className="flex flex-col items-center text-center text-white">
+<<<<<<< HEAD
             {/* Logo do Escritório */}
             {!logoErro ? (
               <img
@@ -88,6 +92,16 @@ function LoginPage() {
                 {identidade.nomeEscritorio}
               </div>
               <div className="mt-1 font-mono text-xs tracking-[0.2em] text-[#c4a574]">
+=======
+            <div className="grid size-16 place-items-center rounded-md border border-[#c4a574] bg-stone-950/35 text-lg font-bold tracking-wide text-white backdrop-blur-[2px]">
+              {identidade.sigla}
+            </div>
+            <div className="mt-5 max-w-[90%]">
+              <div className="text-lg font-semibold leading-snug tracking-wide sm:text-xl">
+                {identidade.nomeEscritorio}
+              </div>
+              <div className="mt-2 font-mono text-xs tracking-[0.2em] text-[#c4a574]">
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
                 ADVOCACIA &amp; CONSULTORIA
               </div>
             </div>
@@ -189,4 +203,8 @@ function LoginPage() {
       </main>
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 78757dcc7af97a83b1b16fdf97cb98e5edc3f88e
