@@ -1,0 +1,656 @@
+"use client";
+
+import { Database, KeyRound, Lock, Plus, Search, ShieldCheck, UserPlus, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { AppShell } from "@/components/AppShell";
+import {
+  AcessoRestrito,
+  Avatar,
+  Chip,
+  Empty,
+  Field,
+  NotaPrototipo,
+  Panel,
+  inputCls,
+  selectCls,
+  type Tone,
+} from "@/components/kit";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MODULOS, ROLE_LABEL, type Log, type Permissao, type Role } from "@/lib/data";
+import { api, mensagemDe } from "@/lib/api";
+import { useApp } from "@/lib/store";
+import { cn } from "@/lib/utils";
+
+const ROLES: Role[] = ["admin", "advogado", "estagiario"];
+
+function ConfiguracoesPage() {
+  const { pode } = useApp();
+  if (pode("Configurações") === "nenhum")
+    return (
+      <AppShell title="Configurações">
+        <AcessoRestrito modulo="Configurações" />
+      </AppShell>
+    );
+
+  return (
+    <AppShell
+      title="Configurações"
+      subtitle="usuários, permissões, auditoria, personalização e segurança"
+    >
+      <Tabs defaultValue="usuarios">
+        <TabsList className="mb-4 w-full max-w-full justify-start overflow-x-auto sm:w-auto">
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="permissoes">Perfis e permissões</TabsTrigger>
+          <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
+          <TabsTrigger value="personalizacao">Personalização</TabsTrigger>
+          <TabsTrigger value="seguranca">Segurança e backups</TabsTrigger>
+        </TabsList>
+        <TabsContent value="usuarios">
+          <Usuarios />
+        </TabsContent>
+        <TabsContent value="permissoes">
+          <Permissoes />
+        </TabsContent>
+        <TabsContent value="auditoria">
+          <Auditoria />
+        </TabsContent>
+        <TabsContent value="personalizacao">
+          <Personalizacao />
+        </TabsContent>
+        <TabsContent value="seguranca">
+          <Seguranca />
+        </TabsContent>
+      </Tabs>
+    </AppShell>
+  );
+}
+
+function Usuarios() {
+  const { usuarios, criarUsuario, atualizarUsuario, redefinirSenhaUsuario, usuario, isAdmin } =
+    useApp();
+  const [novo, setNovo] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [senhaGerada, setSenhaGerada] = useState<{ nome: string; senha: string } | null>(null);
+  const [f, setF] = useState({ nome: "", email: "", oab: "", role: "advogado" as Role });
+
+  return (
+    <Panel
+      title={`${usuarios.length} usuários`}
+      action={
+        <Button size="sm" onClick={() => setNovo(true)}>
+          <UserPlus className="size-3.5" /> Novo usuário
+        </Button>
+      }
+    >
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>E-mail</TableHead>
+              <TableHead>OAB</TableHead>
+              <TableHead>Perfil</TableHead>
+              <TableHead>Último acesso</TableHead>
+              <TableHead>Ativo</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {usuarios.map((u) => (
+              <TableRow key={u.id} className={cn(!u.ativo && "opacity-50")}>
+                <TableCell>
+                  <span className="flex items-center gap-2 whitespace-nowrap font-medium">
+                    <Avatar nome={u.nome} /> {u.nome}
+                    {u.nome === usuario && <Chip tone="brand">você</Chip>}
+                  </span>
+                </TableCell>
+                <TableCell className="text-xs">{u.email}</TableCell>
+                <TableCell className="whitespace-nowrap font-mono text-[11px]">
+                  {u.oab ?? "—"}
+                </TableCell>
+                <TableCell>
+                  <select
+                    className={cn(selectCls, "h-8 w-auto text-xs")}
+                    value={u.role}
+                    disabled={u.nome === usuario}
+                    onChange={(e) => {
+                      void atualizarUsuario(u.id, { role: e.target.value as Role }).then(
+                        (ok) => ok && toast.success("Perfil atualizado"),
+                      );
+                    }}
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {ROLE_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                </TableCell>
+                <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                  {u.ultimoAcesso}
+                </TableCell>
+                <TableCell>
+                  <Switch
+                    checked={u.ativo}
+                    disabled={u.nome === usuario}
+                    onCheckedChange={(v) => void atualizarUsuario(u.id, { ativo: v })}
+                  />
+                </TableCell>
+                <TableCell>
+                  {isAdmin && u.nome !== usuario && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-xs"
+                      onClick={() =>
+                        void redefinirSenhaUsuario(u.id).then(
+                          (senha) => senha && setSenhaGerada({ nome: u.nome, senha }),
+                        )
+                      }
+                    >
+                      <KeyRound className="size-3.5" /> Redefinir senha
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={novo} onOpenChange={setNovo}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo usuário</DialogTitle>
+            <DialogDescription>
+              Uma senha temporária será gerada. Entregue-a à pessoa por um canal seguro: ela terá de
+              trocá-la no primeiro acesso.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Field label="Nome">
+              <input
+                className={inputCls}
+                value={f.nome}
+                onChange={(e) => setF({ ...f, nome: e.target.value })}
+              />
+            </Field>
+            <Field label="E-mail">
+              <input
+                className={inputCls}
+                value={f.email}
+                onChange={(e) => setF({ ...f, email: e.target.value })}
+              />
+            </Field>
+            <Field label="OAB (opcional)">
+              <input
+                className={inputCls}
+                value={f.oab}
+                onChange={(e) => setF({ ...f, oab: e.target.value })}
+              />
+            </Field>
+            <Field label="Perfil">
+              <select
+                className={selectCls}
+                value={f.role}
+                onChange={(e) => setF({ ...f, role: e.target.value as Role })}
+              >
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNovo(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={salvando}
+              onClick={async () => {
+                if (!f.nome.trim() || !f.email.trim()) {
+                  toast.error("Informe nome e e-mail");
+                  return;
+                }
+                setSalvando(true);
+                const senha = await criarUsuario({
+                  nome: f.nome.trim(),
+                  email: f.email.trim(),
+                  ...(f.oab.trim() && { oab: f.oab.trim() }),
+                  role: f.role,
+                });
+                setSalvando(false);
+                if (!senha) return;
+                setSenhaGerada({ nome: f.nome.trim(), senha });
+                setF({ nome: "", email: "", oab: "", role: "advogado" });
+                setNovo(false);
+              }}
+            >
+              Criar usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!senhaGerada} onOpenChange={(o) => !o && setSenhaGerada(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Senha temporária de {senhaGerada?.nome}</DialogTitle>
+            <DialogDescription>
+              Ela aparece só agora. Copie e entregue por um canal seguro; a troca é obrigatória no
+              primeiro acesso.
+            </DialogDescription>
+          </DialogHeader>
+          <code className="block select-all rounded-lg bg-accent px-3 py-2 text-center font-mono text-sm">
+            {senhaGerada?.senha}
+          </code>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (senhaGerada)
+                  void navigator.clipboard?.writeText(senhaGerada.senha).catch(() => undefined);
+                toast.success("Senha copiada");
+              }}
+            >
+              Copiar
+            </Button>
+            <Button onClick={() => setSenhaGerada(null)}>Pronto</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Panel>
+  );
+}
+
+const permTone: Record<Permissao, string> = {
+  editar: "bg-[var(--success-soft)] text-[var(--success)]",
+  ver: "bg-[var(--brand-soft)] text-[var(--brand-soft-foreground)]",
+  nenhum: "bg-accent text-muted-foreground",
+};
+const permLabel: Record<Permissao, string> = {
+  editar: "Ver e editar",
+  ver: "Somente ver",
+  nenhum: "Sem acesso",
+};
+
+function Permissoes() {
+  const { permissoes, alterarPermissao } = useApp();
+  return (
+    <Panel title="Matriz de permissões por perfil">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Módulo</TableHead>
+              {ROLES.map((r) => (
+                <TableHead key={r} className="text-center">
+                  {ROLE_LABEL[r]}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {MODULOS.map((m) => (
+              <TableRow key={m}>
+                <TableCell className="whitespace-nowrap font-medium">
+                  {m}
+                  {m === "Financeiro" && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-[var(--warning)]">
+                      <Lock className="size-3" /> regra fixa
+                    </span>
+                  )}
+                </TableCell>
+                {ROLES.map((r) => {
+                  const travado = r === "admin" || m === "Financeiro";
+                  const v: Permissao =
+                    m === "Financeiro" ? (r === "admin" ? "editar" : "nenhum") : permissoes[r][m];
+                  return (
+                    <TableCell key={r} className="text-center">
+                      {travado ? (
+                        <span
+                          className={cn(
+                            "inline-block rounded-md px-2 py-1 text-[11px] font-semibold",
+                            permTone[v],
+                          )}
+                        >
+                          {permLabel[v]}
+                        </span>
+                      ) : (
+                        <select
+                          value={v}
+                          onChange={(e) => {
+                            void alterarPermissao(r, m, e.target.value as Permissao);
+                          }}
+                          className={cn(
+                            "rounded-md border-0 px-2 py-1 text-[11px] font-semibold outline-none",
+                            permTone[v],
+                          )}
+                        >
+                          {(["editar", "ver", "nenhum"] as Permissao[]).map((p) => (
+                            <option key={p} value={p}>
+                              {permLabel[p]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="p-3">
+        <NotaPrototipo>
+          O Financeiro (honorários a receber) é exclusivo do Advogado Administrador por regra de
+          negócio e não pode ser liberado a outros perfis. As mudanças valem imediatamente e ficam
+          registradas na auditoria.
+        </NotaPrototipo>
+      </div>
+    </Panel>
+  );
+}
+
+const acaoTone: Record<Log["acao"], Tone> = {
+  Criou: "success",
+  Editou: "brand",
+  Excluiu: "critical",
+  Visualizou: "neutral",
+  Login: "neutral",
+  Logout: "neutral",
+  Exportou: "warning",
+};
+
+function Auditoria() {
+  const { logs, usuarios, recarregarLogs } = useApp();
+  useEffect(() => {
+    void recarregarLogs();
+  }, [recarregarLogs]);
+  const [quem, setQuem] = useState("Todos");
+  const [modulo, setModulo] = useState("Todos");
+  const [busca, setBusca] = useState("");
+  const modulos = useMemo(() => [...new Set(logs.map((l) => l.modulo))], [logs]);
+  const lista = logs.filter(
+    (l) =>
+      (quem === "Todos" || l.usuario === quem) &&
+      (modulo === "Todos" || l.modulo === modulo) &&
+      (!busca || l.descricao.toLowerCase().includes(busca.toLowerCase())),
+  );
+
+  return (
+    <Panel
+      title="Log de auditoria — quem fez o quê"
+      action={
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {lista.length} de {logs.length}
+        </span>
+      }
+    >
+      <div className="flex flex-wrap gap-2 border-b border-border p-3">
+        <div className="relative w-full min-w-0 sm:w-auto sm:flex-1 sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            className={cn(inputCls, "pl-9")}
+            placeholder="Buscar ação…"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
+        <select
+          className={cn(selectCls, "w-auto")}
+          value={quem}
+          onChange={(e) => setQuem(e.target.value)}
+        >
+          <option value="Todos">Todos os usuários</option>
+          {usuarios.map((u) => (
+            <option key={u.id}>{u.nome}</option>
+          ))}
+        </select>
+        <select
+          className={cn(selectCls, "w-auto")}
+          value={modulo}
+          onChange={(e) => setModulo(e.target.value)}
+        >
+          <option value="Todos">Todos os módulos</option>
+          {modulos.map((m) => (
+            <option key={m}>{m}</option>
+          ))}
+        </select>
+      </div>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Data e hora</TableHead>
+              <TableHead>Usuário</TableHead>
+              <TableHead>Ação</TableHead>
+              <TableHead>Módulo</TableHead>
+              <TableHead>Descrição</TableHead>
+              <TableHead>IP</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {lista.map((l) => (
+              <TableRow key={l.id}>
+                <TableCell className="whitespace-nowrap font-mono text-[11px]">
+                  {l.quando}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-xs">{l.usuario}</TableCell>
+                <TableCell>
+                  <Chip tone={acaoTone[l.acao]}>{l.acao}</Chip>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-xs">{l.modulo}</TableCell>
+                <TableCell className="min-w-[240px] text-sm">
+                  {l.resultado !== "sucesso" && (
+                    <Chip tone="critical" className="mr-1.5">
+                      {l.resultado === "negado" ? "negado" : "falha"}
+                    </Chip>
+                  )}
+                  {l.descricao}
+                </TableCell>
+                <TableCell className="font-mono text-[11px] text-muted-foreground">
+                  {l.ip}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {lista.length === 0 && <Empty>Nenhum registro.</Empty>}
+      </div>
+      <div className="p-3">
+        <NotaPrototipo>
+          Registros gravados pelo servidor, que não podem ser alterados nem apagados pela aplicação.
+          São exibidos os 600 mais recentes.
+        </NotaPrototipo>
+      </div>
+    </Panel>
+  );
+}
+
+const CORES = [
+  { id: "padrao", nome: "Azul marinho", swatch: "oklch(0.363 0.068 265)" },
+  { id: "vinho", nome: "Vinho", swatch: "oklch(0.42 0.13 15)" },
+  { id: "verde", nome: "Verde", swatch: "oklch(0.45 0.09 165)" },
+  { id: "grafite", nome: "Grafite", swatch: "oklch(0.3 0.01 260)" },
+];
+
+function Personalizacao() {
+  const { identidade, setIdentidade, categorias, setCategorias, registrar } = useApp();
+  const [novos, setNovos] = useState<Record<string, string>>({});
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Panel title="Identidade visual">
+        <div className="space-y-4 p-5">
+          <Field label="Nome do escritório">
+            <input
+              className={inputCls}
+              value={identidade.nomeEscritorio}
+              onChange={(e) => setIdentidade({ ...identidade, nomeEscritorio: e.target.value })}
+            />
+          </Field>
+          <Field label="Sigla (aparece no logotipo)">
+            <input
+              className={cn(inputCls, "w-24 font-bold uppercase")}
+              maxLength={3}
+              value={identidade.sigla}
+              onChange={(e) =>
+                setIdentidade({ ...identidade, sigla: e.target.value.toUpperCase() })
+              }
+            />
+          </Field>
+          <Field label="Cor principal">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {CORES.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setIdentidade({ ...identidade, cor: c.id });
+                    registrar("Editou", "Configurações", `Alterou a cor principal para ${c.nome}`);
+                  }}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs",
+                    identidade.cor === c.id
+                      ? "border-primary ring-2 ring-ring"
+                      : "border-border hover:bg-accent",
+                  )}
+                >
+                  <span className="size-4 rounded-full" style={{ background: c.swatch }} />
+                  {c.nome}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Logotipo">
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-border px-4 py-3 text-sm text-muted-foreground hover:bg-accent">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={() => toast.info("O envio de logotipo ainda não está disponível.")}
+              />
+              <Plus className="size-4" /> Enviar imagem (PNG ou SVG)
+            </label>
+          </Field>
+        </div>
+      </Panel>
+
+      <Panel title="Categorias" delay={60}>
+        <div className="space-y-5 p-5">
+          {Object.entries(categorias).map(([grupo, itens]) => (
+            <div key={grupo}>
+              <div className="mb-2 text-xs font-semibold">{grupo}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {itens.map((i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs"
+                  >
+                    {i}
+                    <button
+                      aria-label={`Remover ${i}`}
+                      onClick={() =>
+                        setCategorias((c) => ({ ...c, [grupo]: itens.filter((x) => x !== i) }))
+                      }
+                      className="opacity-50 hover:opacity-100"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+                <form
+                  className="inline-flex"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const v = (novos[grupo] ?? "").trim();
+                    if (!v) return;
+                    setCategorias((c) => ({ ...c, [grupo]: [...itens, v] }));
+                    setNovos((n) => ({ ...n, [grupo]: "" }));
+                  }}
+                >
+                  <input
+                    className="h-7 w-28 rounded-md border border-dashed border-border bg-transparent px-2 text-xs outline-none focus:border-primary"
+                    placeholder="+ adicionar"
+                    value={novos[grupo] ?? ""}
+                    onChange={(e) => setNovos((n) => ({ ...n, [grupo]: e.target.value }))}
+                  />
+                </form>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function Seguranca() {
+  const [encerrando, setEncerrando] = useState(false);
+
+  const encerrarOutras = async () => {
+    setEncerrando(true);
+    try {
+      await api("DELETE", "/api/auth/sessoes");
+      toast.success("As outras sessões foram encerradas");
+    } catch (e) {
+      toast.error(mensagemDe(e));
+    } finally {
+      setEncerrando(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Panel title="Sessões">
+        <div className="space-y-3 p-5 text-sm">
+          <p className="text-muted-foreground">
+            A sessão expira após um período sem uso e tem duração máxima definida no servidor. Se
+            você entrou em outro computador e esqueceu de sair, encerre as outras sessões abaixo.
+          </p>
+          <Button variant="outline" onClick={() => void encerrarOutras()} disabled={encerrando}>
+            <KeyRound className="size-4" /> Encerrar minhas outras sessões
+          </Button>
+        </div>
+      </Panel>
+      <Panel title="Backups e proteção dos dados" delay={60}>
+        <div className="space-y-3 p-5 text-sm text-muted-foreground">
+          <p className="flex gap-2">
+            <Database className="mt-0.5 size-4 shrink-0" />
+            Os backups do banco de dados são feitos pela infraestrutura (Supabase) e configurados no
+            painel do projeto, não por esta tela.
+          </p>
+          <p className="flex gap-2">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+            Senhas são guardadas com Argon2id, a sessão usa cookie HttpOnly e toda ação relevante
+            fica na aba Auditoria.
+          </p>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+export default ConfiguracoesPage;

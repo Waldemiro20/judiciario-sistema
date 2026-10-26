@@ -1,10 +1,9 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, usePathname } from "@/lib/navegacao";
 import {
   Bell,
   LogOut,
   BarChart3,
   CalendarDays,
-  FileSignature,
   FolderTree,
   Gavel,
   LayoutDashboard,
@@ -40,7 +39,8 @@ import {
 } from "@/components/ui/command";
 import { useApp } from "@/lib/store";
 import { usePendencias } from "@/lib/pendencias";
-import { iniciais, PERFIS_DEMO, ROLE_LABEL, type Modulo } from "@/lib/data";
+import { iniciais, ROLE_LABEL, type Modulo } from "@/lib/data";
+import { TrocarSenha } from "@/components/TrocarSenha";
 import { cn } from "@/lib/utils";
 
 type NavItem = { to: string; label: Modulo; icon: LucideIcon };
@@ -50,18 +50,10 @@ const NAV: { grupo: string; itens: NavItem[] }[] = [
     grupo: "Rotina",
     itens: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/clientes", label: "Clientes", icon: Users },
       { to: "/tarefas", label: "Tarefas", icon: ListChecks },
       { to: "/agenda", label: "Agenda", icon: CalendarDays },
       { to: "/audiencias", label: "Audiências", icon: Scale },
-    ],
-  },
-  {
-    grupo: "Cadastros",
-    itens: [
-      { to: "/processos", label: "Processos", icon: Gavel },
-      { to: "/clientes", label: "Clientes", icon: Users },
-      { to: "/documentos", label: "Documentos", icon: FolderTree },
-      { to: "/contratos", label: "Contratos e Peças", icon: FileSignature },
     ],
   },
   {
@@ -76,7 +68,7 @@ const NAV: { grupo: string; itens: NavItem[] }[] = [
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { pode, tarefas, usuario } = useApp();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const pathname = usePathname();
   const minhasPendentes = tarefas.filter(
     (t) => t.coluna !== "Concluído" && t.responsavel === usuario,
   ).length;
@@ -193,7 +185,7 @@ function Notificacoes() {
           </span>
         )}
       </PopoverTrigger>
-      
+
       <PopoverContent align="end" className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-border px-4 py-3">
           <div className="text-sm font-semibold">Pendências</div>
@@ -212,8 +204,7 @@ function Notificacoes() {
               key={p.id}
               onClick={() => {
                 setOpen(false);
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                navigate({ to: p.to as any, params: p.params as any });
+                navigate({ to: p.to, params: p.params });
               }}
               className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent"
             >
@@ -328,7 +319,7 @@ function BuscaGlobal() {
 }
 
 function PerfilMenu() {
-  const { usuario, role, trocarPerfil, sair, theme, toggleTheme } = useApp();
+  const { usuario, role, sair, theme, toggleTheme } = useApp();
   const navigate = useNavigate();
   return (
     <DropdownMenu>
@@ -342,23 +333,10 @@ function PerfilMenu() {
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          Simular acesso como (protótipo)
+        <DropdownMenuLabel className="font-normal">
+          <span className="block text-sm">{usuario}</span>
+          <span className="block text-[11px] text-muted-foreground">{ROLE_LABEL[role]}</span>
         </DropdownMenuLabel>
-        {PERFIS_DEMO.map((p) => (
-          <DropdownMenuItem key={p.nome} onSelect={() => trocarPerfil(p.nome)} className="gap-2">
-            <span className="grid size-7 place-items-center rounded-full bg-accent text-[10px] font-semibold">
-              {iniciais(p.nome)}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm">{p.nome}</span>
-              <span className="block text-[11px] text-muted-foreground">{ROLE_LABEL[p.role]}</span>
-            </span>
-            {p.nome === usuario && (
-              <span className="ml-auto size-2 rounded-full bg-[var(--success)]" />
-            )}
-          </DropdownMenuItem>
-        ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem className="gap-2 sm:hidden" onSelect={toggleTheme}>
           {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -370,8 +348,7 @@ function PerfilMenu() {
         <DropdownMenuItem
           className="gap-2 text-[var(--critical)]"
           onSelect={() => {
-            sair();
-            navigate({ to: "/login" });
+            void sair().then(() => navigate({ to: "/login" }));
           }}
         >
           <LogOut className="size-4" /> Sair
@@ -392,16 +369,16 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const { theme, toggleTheme, logado } = useApp();
+  const { theme, toggleTheme, logado, deveTrocarSenha } = useApp();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  // Sem login, as telas internas não aparecem: redireciona para /login.
   useEffect(() => {
     if (logado === false) navigate({ to: "/login" });
   }, [logado, navigate]);
 
   if (!logado) return <div className="min-h-dvh bg-background" />;
+  if (deveTrocarSenha) return <TrocarSenha />;
 
   return (
     <div className="min-h-dvh w-full bg-background font-sans text-foreground antialiased">

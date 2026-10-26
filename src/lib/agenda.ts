@@ -2,7 +2,6 @@ import { parseISO, toISO, type Evento, type TipoEvento } from "./data";
 
 export type Ocorrencia = { evento: Evento; data: string };
 
-/** Expande eventos (inclusive recorrentes) dentro do intervalo [inicio, fim]. */
 export function ocorrencias(eventos: Evento[], inicio: Date, fim: Date): Ocorrencia[] {
   const out: Ocorrencia[] = [];
   const ini = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate()).getTime();

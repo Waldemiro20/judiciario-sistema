@@ -77,7 +77,6 @@ export function prazoInfo(t: Tarefa): { label: string; tone: Tone } {
 
 export const minutosTotais = (t: Tarefa) => t.apontamentos.reduce((s, a) => s + a.minutos, 0);
 
-/** Hook para alterar uma tarefa registrando histórico nominal (quem fez e quando). */
 export function useAtualizarTarefa() {
   const { setTarefas, usuario, registrar } = useApp();
   return (id: string, fn: (t: Tarefa) => Tarefa, historico?: string) => {
@@ -100,7 +99,6 @@ export function useAtualizarTarefa() {
   };
 }
 
-/** Ações comuns de uma tarefa: concluir/reabrir, mover, duplicar e excluir (com desfazer). */
 export function useAcoesTarefa() {
   const { tarefas, setTarefas, usuario, registrar } = useApp();
   const atualizar = useAtualizarTarefa();
@@ -166,7 +164,6 @@ export function useAcoesTarefa() {
   return { mover, alternarConclusao, duplicar, excluir };
 }
 
-/** Confirmação antes de excluir uma tarefa. */
 export function ConfirmarExclusaoTarefa({
   tarefa,
   onOpenChange,
@@ -208,7 +205,6 @@ export function ConfirmarExclusaoTarefa({
   );
 }
 
-/** Menu "⋯" com todas as ações de uma tarefa. Usado no painel, no quadro e nas listas. */
 export function TarefaMenu({
   t,
   onEditar,
@@ -224,8 +220,6 @@ export function TarefaMenu({
   const [confirmar, setConfirmar] = useState(false);
   const feita = t.coluna === "Concluído";
 
-  // Os eventos do React atravessam portais: sem isso, cliques no menu ou na confirmação
-  // chegariam ao cartão da tarefa e o abririam.
   const isolar = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
@@ -362,7 +356,6 @@ export function TarefaDialog({
     <Dialog open={!!t} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-h-[92dvh] max-w-3xl overflow-y-auto"
-        // Em telas de toque, não focar o título ao abrir (evita abrir o teclado sozinho).
         onOpenAutoFocus={(e) => {
           if (!window.matchMedia("(pointer: fine)").matches) e.preventDefault();
         }}
@@ -493,9 +486,9 @@ export function TarefaDialog({
                 const tipo = e.target.value as Tarefa["vinculoTipo"];
                 const v =
                   tipo === "Processo"
-                    ? processos[0]!.numero
+                    ? (processos[0]?.numero ?? "")
                     : tipo === "Cliente"
-                      ? clientes[0]!.nome
+                      ? (clientes[0]?.nome ?? "")
                       : "Interno";
                 atualizar(
                   t.id,
@@ -885,14 +878,13 @@ export function NovaTarefaDialog({
     prioridade: "Média" as Prioridade,
     responsavel: usuario,
     vinculoTipo: "Processo" as Tarefa["vinculoTipo"],
-    vinculo: processos[0]!.numero,
+    vinculo: processos[0]?.numero ?? "",
     prazo: HOJE,
   };
   const [f, setF] = useState(vazio);
 
   useEffect(() => {
     if (open) setF({ ...vazio, ...preset });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const vinculos =
@@ -984,9 +976,9 @@ export function NovaTarefaDialog({
                   vinculoTipo: tipo,
                   vinculo:
                     tipo === "Processo"
-                      ? processos[0]!.numero
+                      ? (processos[0]?.numero ?? "")
                       : tipo === "Cliente"
-                        ? clientes[0]!.nome
+                        ? (clientes[0]?.nome ?? "")
                         : "Interno",
                 });
               }}

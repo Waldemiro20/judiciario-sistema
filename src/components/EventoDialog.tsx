@@ -58,7 +58,6 @@ const vazio = (usuario: string, tipo: TipoEvento, data: string): Form => ({
   observacoes: "",
 });
 
-/** Cadastro/edição de compromisso (Audiência, Reunião ou Prazo). */
 export function EventoDialog({
   open,
   onOpenChange,
@@ -91,7 +90,6 @@ export function EventoDialog({
       });
     else setF(vazio(usuario, tipoInicial, dataInicial));
     setTestemunha("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));

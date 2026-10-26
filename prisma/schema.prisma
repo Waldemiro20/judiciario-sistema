@@ -1,0 +1,475 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Escritorio {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  nome       String
+  sigla      String
+  cor        String   @default("padrao")
+  categorias Json     @default("{}")
+  criadoEm   DateTime @default(now()) @db.Timestamptz(3)
+
+  usuarios     Usuario[]
+  permissoes   PermissaoPerfil[]
+  clientes     Cliente[]
+  processos    Processo[]
+  tarefas      Tarefa[]
+  eventos      Evento[]
+  pastas       Pasta[]
+  documentos   Documento[]
+  lancamentos  Lancamento[]
+  modelos      Modelo[]
+  contratos    Contrato[]
+  intimacoes   Intimacao[]
+  auditoria    Auditoria[]
+}
+
+model Usuario {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  escritorioId    String    @db.Uuid
+  nome            String
+  email           String    @unique
+  oab             String?
+  role            String
+  ativo           Boolean   @default(true)
+  senhaHash       String
+  deveTrocarSenha Boolean   @default(true)
+  ultimoAcessoEm  DateTime? @db.Timestamptz(3)
+  preferencias    Json      @default("{}")
+  criadoEm        DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm    DateTime  @updatedAt @db.Timestamptz(3)
+
+  escritorio         Escritorio        @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  sessoes            Sessao[]
+  processosResp      Processo[]        @relation("ProcessoResponsavel")
+  equipes            ProcessoEquipe[]
+  tarefasResp        Tarefa[]          @relation("TarefaResponsavel")
+  eventos            Evento[]
+  acessosPasta       PastaAcesso[]
+  idempotencia       Idempotencia[]
+
+  @@unique([escritorioId, nome])
+  @@index([escritorioId])
+}
+
+model Sessao {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tokenHash   String    @unique
+  usuarioId   String    @db.Uuid
+  criadoEm    DateTime  @default(now()) @db.Timestamptz(3)
+  expiraEm    DateTime  @db.Timestamptz(3)
+  ultimoUsoEm DateTime  @default(now()) @db.Timestamptz(3)
+  revogadaEm  DateTime? @db.Timestamptz(3)
+  ip          String?
+  userAgent   String?
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+}
+
+model TentativaLogin {
+  id       BigInt   @id @default(autoincrement())
+  chave    String
+  sucesso  Boolean
+  criadoEm DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([chave, criadoEm])
+}
+
+model Idempotencia {
+  usuarioId String   @db.Uuid
+  chave     String
+  recurso   String
+  recursoId String
+  criadoEm  DateTime @default(now()) @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, chave])
+}
+
+model PermissaoPerfil {
+  escritorioId String @db.Uuid
+  role         String
+  modulo       String
+  nivel        String
+
+  escritorio Escritorio @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+
+  @@id([escritorioId, role, modulo])
+}
+
+model Cliente {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  escritorioId   String    @db.Uuid
+  nome           String
+  tipo           String
+  documento      String
+  documento2     String    @default("")
+  desde          String
+  status         String
+  contatos       Json      @default("[]")
+  enderecos      Json      @default("[]")
+  descricaoCaso  String?
+  descricaoCasoEm DateTime? @db.Timestamptz(3)
+  versao         Int       @default(1)
+  criadoEm       DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm   DateTime  @updatedAt @db.Timestamptz(3)
+
+  escritorio  Escritorio         @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  documentos  DocPessoal[]
+  historico   ClienteHistorico[]
+  processos   Processo[]
+  tarefas     Tarefa[]
+  eventos     Evento[]
+  lancamentos Lancamento[]
+  contratos   Contrato[]
+
+  @@unique([escritorioId, nome])
+  @@index([escritorioId])
+}
+
+model ClienteHistorico {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  clienteId String   @db.Uuid
+  texto     String
+  autorId   String?  @db.Uuid
+  criadoEm  DateTime @default(now()) @db.Timestamptz(3)
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+
+  @@index([clienteId, criadoEm])
+}
+
+model DocPessoal {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  clienteId    String    @db.Uuid
+  ordem        Int       @default(0)
+  nome         String
+  obrigatorio  Boolean   @default(true)
+  arquivo      String?
+  storageKey   String?   @unique
+  mime         String?
+  tamanho      Int?
+  enviadoEm    DateTime? @db.Timestamptz(3)
+  enviadoPorId String?   @db.Uuid
+  enviadoPor   String?
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+
+  @@index([clienteId])
+}
+
+model Processo {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  escritorioId   String   @db.Uuid
+  numero         String
+  titulo         String
+  clienteId      String   @db.Uuid
+  area           String
+  status         String
+  vara           String   @default("")
+  tribunal       String   @default("")
+  juiz           String   @default("")
+  parteContraria String   @default("")
+  partes         Json     @default("[]")
+  valorCausa     Decimal  @default(0) @db.Decimal(15, 2)
+  fase           String   @default("")
+  responsavelId  String   @db.Uuid
+  risco          String
+  distribuicao   String   @default("")
+  sigiloso       Boolean  @default(false)
+  versao         Int      @default(1)
+  criadoEm       DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm   DateTime @updatedAt @db.Timestamptz(3)
+
+  escritorio    Escritorio       @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  cliente       Cliente          @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  responsavel   Usuario          @relation("ProcessoResponsavel", fields: [responsavelId], references: [id], onDelete: Restrict)
+  equipe        ProcessoEquipe[]
+  movimentacoes Movimentacao[]
+  tarefas       Tarefa[]
+  eventos       Evento[]
+  documentos    Documento[]
+  lancamentos   Lancamento[]
+  intimacoes    Intimacao[]
+
+  @@unique([escritorioId, numero])
+  @@index([escritorioId, status])
+  @@index([clienteId])
+  @@index([responsavelId])
+}
+
+model ProcessoEquipe {
+  processoId String @db.Uuid
+  usuarioId  String @db.Uuid
+
+  processo Processo @relation(fields: [processoId], references: [id], onDelete: Restrict)
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@id([processoId, usuarioId])
+  @@index([usuarioId])
+}
+
+model Movimentacao {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  processoId String   @db.Uuid
+  autorId    String?  @db.Uuid
+  autorNome  String
+  acao       String
+  criadoEm   DateTime @default(now()) @db.Timestamptz(3)
+
+  processo Processo @relation(fields: [processoId], references: [id], onDelete: Restrict)
+
+  @@index([processoId, criadoEm])
+}
+
+model Tarefa {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  escritorioId  String    @db.Uuid
+  titulo        String
+  descricao     String    @default("")
+  coluna        String
+  prioridade    String
+  responsavelId String    @db.Uuid
+  vinculoTipo   String
+  processoId    String?   @db.Uuid
+  clienteId     String?   @db.Uuid
+  prazo         DateTime  @db.Date
+  subtarefas    Json      @default("[]")
+  versao        Int       @default(1)
+  excluidoEm    DateTime? @db.Timestamptz(3)
+  criadoEm      DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm  DateTime  @updatedAt @db.Timestamptz(3)
+
+  escritorio  Escritorio       @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  responsavel Usuario          @relation("TarefaResponsavel", fields: [responsavelId], references: [id], onDelete: Restrict)
+  processo    Processo?        @relation(fields: [processoId], references: [id], onDelete: Restrict)
+  cliente     Cliente?         @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  registros   TarefaRegistro[]
+
+  @@index([escritorioId, excluidoEm])
+  @@index([responsavelId])
+  @@index([processoId])
+}
+
+model TarefaRegistro {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  tarefaId  String   @db.Uuid
+  tipo      String
+  autorId   String?  @db.Uuid
+  autorNome String
+  texto     String   @default("")
+  minutos   Int?
+  criadoEm  DateTime @default(now()) @db.Timestamptz(3)
+
+  tarefa Tarefa @relation(fields: [tarefaId], references: [id], onDelete: Restrict)
+
+  @@index([tarefaId, criadoEm])
+}
+
+model Evento {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  escritorioId String    @db.Uuid
+  titulo       String
+  tipo         String
+  data         DateTime  @db.Date
+  hora         String
+  duracaoMin   Int
+  advogadoId   String    @db.Uuid
+  local        String    @default("")
+  linkOnline   String?
+  juiz         String?
+  processoId   String?   @db.Uuid
+  clienteId    String?   @db.Uuid
+  clienteNome  String?
+  testemunhas  String[]  @default([])
+  lembretes    String[]  @default([])
+  recorrencia  String
+  observacoes  String?
+  versao       Int       @default(1)
+  excluidoEm   DateTime? @db.Timestamptz(3)
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+
+  escritorio Escritorio @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  advogado   Usuario    @relation(fields: [advogadoId], references: [id], onDelete: Restrict)
+  processo   Processo?  @relation(fields: [processoId], references: [id], onDelete: Restrict)
+  cliente    Cliente?   @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+
+  @@index([escritorioId, data])
+  @@index([processoId])
+}
+
+model Pasta {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  escritorioId String   @db.Uuid
+  nome         String
+  confidencial Boolean  @default(false)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+
+  escritorio Escritorio    @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  acessos    PastaAcesso[]
+  documentos Documento[]
+
+  @@unique([escritorioId, nome])
+}
+
+model PastaAcesso {
+  pastaId   String @db.Uuid
+  usuarioId String @db.Uuid
+
+  pasta   Pasta   @relation(fields: [pastaId], references: [id], onDelete: Restrict)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@id([pastaId, usuarioId])
+}
+
+model Documento {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  escritorioId String   @db.Uuid
+  nome         String
+  pastaId      String   @db.Uuid
+  processoId   String?  @db.Uuid
+  conteudo     String   @default("")
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  escritorio Escritorio        @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  pasta      Pasta             @relation(fields: [pastaId], references: [id], onDelete: Restrict)
+  processo   Processo?         @relation(fields: [processoId], references: [id], onDelete: Restrict)
+  versoes    DocumentoVersao[]
+
+  @@unique([pastaId, nome])
+  @@index([escritorioId])
+  @@index([processoId])
+}
+
+model DocumentoVersao {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  documentoId String   @db.Uuid
+  numero      Int
+  autorId     String?  @db.Uuid
+  autorNome   String
+  storageKey  String
+  mime        String
+  tamanho     Int
+  sha256      String
+  criadoEm    DateTime @default(now()) @db.Timestamptz(3)
+
+  documento Documento @relation(fields: [documentoId], references: [id], onDelete: Restrict)
+
+  @@unique([documentoId, numero])
+}
+
+model Lancamento {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  escritorioId  String    @db.Uuid
+  descricao     String
+  clienteId     String?   @db.Uuid
+  processoId    String?   @db.Uuid
+  tipo          String
+  categoria     String
+  modelo        String
+  valor         Decimal   @db.Decimal(15, 2)
+  vencimento    DateTime  @db.Date
+  parcela       String?
+  situacao      String
+  valorRecebido Decimal?  @db.Decimal(15, 2)
+  versao        Int       @default(1)
+  excluidoEm    DateTime? @db.Timestamptz(3)
+  criadoEm      DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm  DateTime  @updatedAt @db.Timestamptz(3)
+
+  escritorio Escritorio @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  cliente    Cliente?   @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  processo   Processo?  @relation(fields: [processoId], references: [id], onDelete: Restrict)
+
+  @@index([escritorioId, vencimento])
+}
+
+model Modelo {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  escritorioId String   @db.Uuid
+  nome         String
+  categoria    String
+  tags         String[] @default([])
+  corpo        String
+  versao       Int      @default(1)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  escritorio Escritorio @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+
+  @@index([escritorioId])
+}
+
+model Contrato {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  escritorioId String   @db.Uuid
+  titulo       String
+  clienteId    String   @db.Uuid
+  inicio       DateTime @db.Date
+  fim          DateTime @db.Date
+  valor        Decimal  @db.Decimal(15, 2)
+  assinatura   String
+  provedor     String?
+  versao       Int      @default(1)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
+  escritorio Escritorio @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  cliente    Cliente    @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+
+  @@index([escritorioId])
+}
+
+model Intimacao {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  escritorioId   String    @db.Uuid
+  processoNumero String
+  processoId     String?   @db.Uuid
+  resumo         String
+  recebidaEm     DateTime  @default(now()) @db.Timestamptz(3)
+  prazoDias      Int
+  lida           Boolean   @default(false)
+  concluida      Boolean   @default(false)
+  versao         Int       @default(1)
+  excluidoEm     DateTime? @db.Timestamptz(3)
+  criadoEm       DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm   DateTime  @updatedAt @db.Timestamptz(3)
+
+  escritorio Escritorio @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+  processo   Processo?  @relation(fields: [processoId], references: [id], onDelete: Restrict)
+
+  @@index([escritorioId, excluidoEm])
+}
+
+model Auditoria {
+  id           BigInt   @id @default(autoincrement())
+  escritorioId String?  @db.Uuid
+  usuarioId    String?  @db.Uuid
+  usuarioNome  String
+  acao         String
+  modulo       String
+  descricao    String
+  recursoTipo  String?
+  recursoId    String?
+  resultado    String   @default("sucesso")
+  ip           String?
+  requestId    String?
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+
+  escritorio Escritorio? @relation(fields: [escritorioId], references: [id], onDelete: Restrict)
+
+  @@index([escritorioId, criadoEm])
+  @@index([usuarioId, criadoEm])
+}

@@ -10,10 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-.output
-.vinxi
-.tanstack/**
-.nitro
+.next
+out
+next-env.d.ts
+*.tsbuildinfo
 *.local
 
 # Wrangler / Cloudflare
@@ -33,3 +33,10 @@ dist-ssr
 
 # Vercel
 .vercel
+
+.pgdata
+.storage
+.env
+.env.*
+!.env.example
+src/generated

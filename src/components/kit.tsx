@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { iniciais, type ProcessStatus } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
-/** Cartão de vidro padrão com cabeçalho opcional. */
 export function Panel({
   title,
   action,
@@ -175,7 +174,6 @@ export function AcessoRestrito({ modulo }: { modulo: string }) {
   );
 }
 
-/** Aviso fixo usado em recursos que dependem de back-end/integração. */
 export function NotaPrototipo({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-border bg-accent/40 px-3 py-2 text-[11px] text-muted-foreground">

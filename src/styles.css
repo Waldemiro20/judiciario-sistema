@@ -4,11 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Vértice — Design system (Glass command deck)
- * All colors are oklch semantic tokens. Never hardcode colors in components.
- */
-
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -206,8 +201,6 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* No celular, campos com fonte menor que 16px fazem o navegador (iOS) dar zoom
-     ao tocar neles. Mantemos 16px em telas pequenas para evitar isso. */
   @media (max-width: 767px) {
     input,
     select,
@@ -217,7 +210,6 @@
   }
 }
 
-/* Cores principais escolhidas em Configurações → Personalização */
 :root[data-brand="vinho"] {
   --primary: oklch(0.42 0.13 15);
   --brand-soft: oklch(0.93 0.03 15);

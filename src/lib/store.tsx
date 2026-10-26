@@ -4,28 +4,16 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { toast } from "sonner";
 import {
-  agoraCarimbo,
-  clientesIniciais,
-  contratosIniciais,
-  documentosIniciais,
-  eventosIniciais,
-  intimacoesIniciais,
-  lancamentosIniciais,
-  logsIniciais,
-  modelosIniciais,
-  pastasIniciais,
-  PERFIS_DEMO,
-  permissoesIniciais,
-  processosIniciais,
-  tarefasIniciais,
-  uid,
-  USUARIOS,
+  MODULOS,
+  ROLES,
   type Cliente,
   type Contrato,
   type Documento,
@@ -42,6 +30,8 @@ import {
   type Tarefa,
   type Usuario,
 } from "./data";
+import { api, ErroApi, listarTudo, mensagemDe, novaChave, quandoPerderSessao } from "./api";
+import { useColecao } from "./sincronia";
 
 type Theme = "light" | "dark";
 type Set<T> = Dispatch<SetStateAction<T>>;
@@ -60,36 +50,56 @@ const widgetsIniciais: Widget[] = [
 
 export type Identidade = { nomeEscritorio: string; sigla: string; cor: string };
 
-/** Credenciais fixas do protótipo (sem back-end). */
-export const LOGIN_DEMO = { email: "admin123@gmail.com", senha: "admin123" };
-const CHAVE_SESSAO = "gestao-juridica:logado";
+type MapaPermissoes = Record<Modulo, Permissao>;
+type MatrizPermissoes = Record<Role, MapaPermissoes>;
+
+type Sessao = {
+  usuario: { id: string; nome: string; email: string; role: Role; deveTrocarSenha: boolean };
+  permissoes: MapaPermissoes;
+  escritorio: Identidade & { categorias: Record<string, string[]> };
+  preferencias: { tema?: Theme; widgets?: Widget[] };
+};
+
+type Resultado = { ok: true } | { ok: false; erro: string };
+
+const semPermissao = Object.fromEntries(MODULOS.map((m) => [m, "nenhum"])) as MapaPermissoes;
+const matrizVazia = Object.fromEntries(ROLES.map((r) => [r, semPermissao])) as MatrizPermissoes;
 
 type AppState = {
   role: Role;
   isAdmin: boolean;
   usuario: string;
-  trocarPerfil: (nome: string) => void;
   theme: Theme;
   toggleTheme: () => void;
   pode: (m: Modulo) => Permissao;
 
-  /** null enquanto a sessão ainda não foi lida do navegador. */
   logado: boolean | null;
-  entrar: (email: string, senha: string) => boolean;
-  sair: () => void;
+  carregando: boolean;
+  deveTrocarSenha: boolean;
+  entrar: (email: string, senha: string) => Promise<Resultado>;
+  sair: () => Promise<void>;
+  trocarSenha: (senhaAtual: string, novaSenha: string) => Promise<Resultado>;
 
   processos: Processo[];
   setProcessos: Set<Processo[]>;
+  criarProcesso: (p: Omit<Processo, "id" | "versao">) => Promise<Processo | null>;
   tarefas: Tarefa[];
   setTarefas: Set<Tarefa[]>;
   eventos: Evento[];
   setEventos: Set<Evento[]>;
   clientes: Cliente[];
   setClientes: Set<Cliente[]>;
+  criarCliente: (c: Omit<Cliente, "id" | "versao">) => Promise<Cliente | null>;
   documentos: Documento[];
-  setDocumentos: Set<Documento[]>;
+  enviarDocumento: (
+    arquivo: File,
+    pasta: string,
+    processo: string,
+  ) => Promise<{ documento: Documento; versao: string } | null>;
+  restaurarVersao: (documentoId: string, versaoId: string) => Promise<boolean>;
   pastas: Pasta[];
-  setPastas: Set<Pasta[]>;
+  criarPasta: (p: Omit<Pasta, "id">) => Promise<boolean>;
+  anexarDocCliente: (clienteId: string, docId: string, arquivo: File) => Promise<boolean>;
   lancamentos: Lancamento[];
   setLancamentos: Set<Lancamento[]>;
   modelos: Modelo[];
@@ -99,10 +109,18 @@ type AppState = {
   intimacoes: Intimacao[];
   setIntimacoes: Set<Intimacao[]>;
   usuarios: Usuario[];
-  setUsuarios: Set<Usuario[]>;
-  permissoes: Record<Role, Record<Modulo, Permissao>>;
-  setPermissoes: Set<Record<Role, Record<Modulo, Permissao>>>;
+  criarUsuario: (d: {
+    nome: string;
+    email: string;
+    oab?: string;
+    role: Role;
+  }) => Promise<string | null>;
+  atualizarUsuario: (id: string, d: { role?: Role; ativo?: boolean }) => Promise<boolean>;
+  redefinirSenhaUsuario: (id: string) => Promise<string | null>;
+  permissoes: MatrizPermissoes;
+  alterarPermissao: (role: Role, modulo: Modulo, nivel: Permissao) => Promise<boolean>;
   logs: Log[];
+  recarregarLogs: () => Promise<void>;
   registrar: (acao: Log["acao"], modulo: string, descricao: string) => void;
 
   widgets: Widget[];
@@ -115,46 +133,194 @@ type AppState = {
 
 const Ctx = createContext<AppState | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
-  const [usuario, setUsuario] = useState(PERFIS_DEMO[0]!.nome);
-  const [role, setRole] = useState<Role>(PERFIS_DEMO[0]!.role);
-  const [theme, setTheme] = useState<Theme>("light");
-  const [logado, setLogado] = useState<boolean | null>(null);
+function useAdiado(fn: (v: unknown) => void, ms: number) {
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  return useCallback(
+    (v: unknown) => {
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => fn(v), ms);
+    },
+    [fn, ms],
+  );
+}
 
-  const [processos, setProcessos] = useState(processosIniciais);
-  const [tarefas, setTarefas] = useState(tarefasIniciais);
-  const [eventos, setEventos] = useState(eventosIniciais);
-  const [clientes, setClientes] = useState(clientesIniciais);
-  const [documentos, setDocumentos] = useState(documentosIniciais);
-  const [pastas, setPastas] = useState(pastasIniciais);
-  const [lancamentos, setLancamentos] = useState(lancamentosIniciais);
-  const [modelos, setModelos] = useState(modelosIniciais);
-  const [contratos, setContratos] = useState(contratosIniciais);
-  const [intimacoes, setIntimacoes] = useState(intimacoesIniciais);
-  const [usuarios, setUsuarios] = useState(USUARIOS);
-  const [permissoes, setPermissoes] = useState(permissoesIniciais);
-  const [logs, setLogs] = useState(logsIniciais);
-  const [widgets, setWidgets] = useState(widgetsIniciais);
-  const [identidade, setIdentidade] = useState<Identidade>({
-    nomeEscritorio: "Lacerda & Voss Advogados",
-    sigla: "LV",
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [sessao, setSessao] = useState<Sessao | null>(null);
+  const [logado, setLogado] = useState<boolean | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [theme, setTheme] = useState<Theme>("light");
+
+  const processos = useColecao<Processo>({
+    caminho: "/api/processos",
+    atualizar: "PATCH",
+    excluir: false,
+  });
+  const clientes = useColecao<Cliente>({
+    caminho: "/api/clientes",
+    atualizar: "PATCH",
+    excluir: false,
+  });
+  const tarefas = useColecao<Tarefa>({
+    caminho: "/api/tarefas",
+    atualizar: "PATCH",
+    excluir: true,
+  });
+  const eventos = useColecao<Evento>({ caminho: "/api/eventos", atualizar: "PUT", excluir: true });
+  const lancamentos = useColecao<Lancamento>({
+    caminho: "/api/lancamentos",
+    atualizar: "PUT",
+    excluir: true,
+  });
+  const modelos = useColecao<Modelo>({ caminho: "/api/modelos", atualizar: "PUT", excluir: false });
+  const contratos = useColecao<Contrato>({
+    caminho: "/api/contratos",
+    atualizar: "PUT",
+    excluir: false,
+  });
+  const intimacoes = useColecao<Intimacao>({
+    caminho: "/api/intimacoes",
+    atualizar: "PUT",
+    excluir: true,
+  });
+  const documentos = useColecao<Documento & { versao?: number }>({
+    caminho: "/api/documentos",
+    atualizar: null,
+    excluir: false,
+  });
+
+  const colecoes = useRef({
+    processos,
+    clientes,
+    tarefas,
+    eventos,
+    lancamentos,
+    modelos,
+    contratos,
+    intimacoes,
+    documentos,
+  });
+  colecoes.current = {
+    processos,
+    clientes,
+    tarefas,
+    eventos,
+    lancamentos,
+    modelos,
+    contratos,
+    intimacoes,
+    documentos,
+  };
+
+  const [pastas, setPastas] = useState<Pasta[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [permissoes, setPermissoes] = useState<MatrizPermissoes>(matrizVazia);
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [widgets, setWidgetsLocal] = useState(widgetsIniciais);
+  const [identidade, setIdentidadeLocal] = useState<Identidade>({
+    nomeEscritorio: "",
+    sigla: "",
     cor: "padrao",
   });
-  const [categorias, setCategorias] = useState<Record<string, string[]>>({
-    "Áreas de atuação": ["Direito Civil", "Criminal", "Previdenciário", "Família", "Consumidor"],
-    "Tipos de compromisso": ["Audiência", "Reunião", "Prazo"],
-    "Categorias financeiras": ["Honorários", "Custas", "Despesas fixas"],
-    "Pastas de documentos": ["Petições", "Provas", "Contratos", "Pareceres"],
-  });
+  const [categorias, setCategoriasLocal] = useState<Record<string, string[]>>({});
 
-  // A sessão fica guardada só na aba atual do navegador (sessionStorage).
-  useEffect(() => {
+  const minhasPermissoes = sessao?.permissoes ?? semPermissao;
+  const role: Role = sessao?.usuario.role ?? "estagiario";
+
+  const pode = useCallback(
+    (m: Modulo): Permissao => minhasPermissoes[m] ?? "nenhum",
+    [minhasPermissoes],
+  );
+
+  const limparTudo = useCallback(() => {
+    for (const c of Object.values(colecoes.current)) c.limpar();
+    setPastas([]);
+    setUsuarios([]);
+    setPermissoes(matrizVazia);
+    setLogs([]);
+    setSessao(null);
+  }, []);
+
+  const recarregarLogs = useCallback(async () => {
     try {
-      setLogado(sessionStorage.getItem(CHAVE_SESSAO) === "1");
+      setLogs(await listarTudo<Log>("/api/auditoria", 3));
     } catch {
-      setLogado(false);
+      setLogs([]);
     }
   }, []);
+
+  const carregarDados = useCallback(
+    async (s: Sessao) => {
+      setCarregando(true);
+      const {
+        processos,
+        intimacoes,
+        clientes,
+        tarefas,
+        eventos,
+        lancamentos,
+        modelos,
+        contratos,
+        documentos,
+      } = colecoes.current;
+      const ver = (m: Modulo) => s.permissoes[m] !== "nenhum";
+      const agenda = ver("Agenda") || ver("Audiências");
+      const tarefasIniciais: Promise<unknown>[] = [
+        api<Usuario[]>("GET", "/api/usuarios").then(setUsuarios),
+        ver("Processos") ? processos.carregar() : Promise.resolve(),
+        ver("Processos") ? intimacoes.carregar() : Promise.resolve(),
+        ver("Clientes") ? clientes.carregar() : Promise.resolve(),
+        ver("Tarefas") ? tarefas.carregar() : Promise.resolve(),
+        agenda ? eventos.carregar() : Promise.resolve(),
+        ver("Financeiro") ? lancamentos.carregar() : Promise.resolve(),
+        ver("Contratos e Peças")
+          ? Promise.all([modelos.carregar(), contratos.carregar()])
+          : Promise.resolve(),
+        ver("Documentos")
+          ? Promise.all([documentos.carregar(), api<Pasta[]>("GET", "/api/pastas").then(setPastas)])
+          : Promise.resolve(),
+        ver("Configurações")
+          ? Promise.all([
+              api<MatrizPermissoes>("GET", "/api/permissoes").then(setPermissoes),
+              recarregarLogs(),
+            ])
+          : Promise.resolve(),
+      ];
+      const resultados = await Promise.allSettled(tarefasIniciais);
+      if (resultados.some((r) => r.status === "rejected"))
+        toast.error("Parte dos dados não pôde ser carregada.", {
+          description: "Recarregue a página para tentar de novo.",
+        });
+      setCarregando(false);
+    },
+    [recarregarLogs],
+  );
+
+  const aplicarSessao = useCallback(
+    async (s: Sessao) => {
+      setSessao(s);
+      setIdentidadeLocal({
+        nomeEscritorio: s.escritorio.nomeEscritorio,
+        sigla: s.escritorio.sigla,
+        cor: s.escritorio.cor,
+      });
+      setCategoriasLocal(s.escritorio.categorias);
+      if (s.preferencias.tema) setTheme(s.preferencias.tema);
+      if (s.preferencias.widgets?.length) setWidgetsLocal(s.preferencias.widgets);
+      setLogado(true);
+      if (!s.usuario.deveTrocarSenha) await carregarDados(s);
+    },
+    [carregarDados],
+  );
+
+  useEffect(() => {
+    quandoPerderSessao(() => {
+      limparTudo();
+      setLogado(false);
+    });
+    api<Sessao>("GET", "/api/auth/sessao", { silencioso401: true })
+      .then(aplicarSessao)
+      .catch(() => setLogado(false));
+  }, [aplicarSessao, limparTudo]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -164,120 +330,262 @@ export function AppProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset["brand"] = identidade.cor;
   }, [identidade.cor]);
 
-  const toggleTheme = useCallback(() => setTheme((t) => (t === "dark" ? "light" : "dark")), []);
-
-  const registrar = useCallback(
-    (acao: Log["acao"], modulo: string, descricao: string) => {
-      const { data, hora } = agoraCarimbo();
-      setLogs((prev) => [
-        {
-          id: uid(),
-          usuario,
-          acao,
-          modulo,
-          descricao,
-          ip: "189.44.12.30",
-          quando: `${data} ${hora}`,
-        },
-        ...prev,
-      ]);
-    },
-    [usuario],
-  );
-
-  const trocarPerfil = useCallback(
-    (nome: string) => {
-      const u = usuarios.find((x) => x.nome === nome);
-      if (!u) return;
-      setUsuario(u.nome);
-      setRole(u.role);
-    },
-    [usuarios],
-  );
-
-  const entrar = useCallback((email: string, senha: string) => {
-    const ok = email.trim().toLowerCase() === LOGIN_DEMO.email && senha === LOGIN_DEMO.senha;
-    if (!ok) return false;
-    const admin = PERFIS_DEMO[0]!;
-    setUsuario(admin.nome);
-    setRole(admin.role);
-    setLogado(true);
-    try {
-      sessionStorage.setItem(CHAVE_SESSAO, "1");
-    } catch {
-      /* sem armazenamento: sessão só em memória */
-    }
-    const { data, hora } = agoraCarimbo();
-    setLogs((prev) => [
-      {
-        id: uid(),
-        usuario: admin.nome,
-        acao: "Login",
-        modulo: "Sistema",
-        descricao: "Acesso ao sistema",
-        ip: "189.44.12.30",
-        quando: `${data} ${hora}`,
-      },
-      ...prev,
-    ]);
-    return true;
+  const salvarPreferencias = useCallback((corpo: unknown) => {
+    void api("PATCH", "/api/preferencias", { corpo }).catch(() => undefined);
   }, []);
+  const salvarPreferenciasAdiado = useAdiado(salvarPreferencias, 500);
 
-  const sair = useCallback(() => {
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => {
+      const novo = t === "dark" ? "light" : "dark";
+      salvarPreferencias({ tema: novo });
+      return novo;
+    });
+  }, [salvarPreferencias]);
+
+  const setWidgets = useCallback<Set<Widget[]>>(
+    (acao) =>
+      setWidgetsLocal((prev) => {
+        const proximo = typeof acao === "function" ? acao(prev) : acao;
+        salvarPreferenciasAdiado({ widgets: proximo });
+        return proximo;
+      }),
+    [salvarPreferenciasAdiado],
+  );
+
+  const salvarEscritorio = useCallback((corpo: unknown) => {
+    void api("PATCH", "/api/escritorio", { corpo }).catch((e) => toast.error(mensagemDe(e)));
+  }, []);
+  const salvarEscritorioAdiado = useAdiado(salvarEscritorio, 700);
+
+  const setIdentidade = useCallback<Set<Identidade>>(
+    (acao) =>
+      setIdentidadeLocal((prev) => {
+        const proxima = typeof acao === "function" ? acao(prev) : acao;
+        if (proxima.nomeEscritorio.trim() && proxima.sigla.trim()) salvarEscritorioAdiado(proxima);
+        return proxima;
+      }),
+    [salvarEscritorioAdiado],
+  );
+
+  const setCategorias = useCallback<Set<Record<string, string[]>>>(
+    (acao) =>
+      setCategoriasLocal((prev) => {
+        const proximas = typeof acao === "function" ? acao(prev) : acao;
+        salvarEscritorio({ categorias: proximas });
+        return proximas;
+      }),
+    [salvarEscritorio],
+  );
+
+  const entrar = useCallback(
+    async (email: string, senha: string): Promise<Resultado> => {
+      try {
+        const s = await api<Sessao>("POST", "/api/auth/login", {
+          corpo: { email: email.trim(), senha },
+          silencioso401: true,
+        });
+        await aplicarSessao(s);
+        return { ok: true };
+      } catch (e) {
+        if (e instanceof ErroApi && e.codigo === "VALIDACAO")
+          return { ok: false, erro: "E-mail ou senha incorretos." };
+        return { ok: false, erro: mensagemDe(e) };
+      }
+    },
+    [aplicarSessao],
+  );
+
+  const sair = useCallback(async () => {
+    await api("POST", "/api/auth/logout", { silencioso401: true }).catch(() => undefined);
+    limparTudo();
     setLogado(false);
+  }, [limparTudo]);
+
+  const trocarSenha = useCallback(
+    async (senhaAtual: string, novaSenha: string): Promise<Resultado> => {
+      try {
+        const s = await api<Sessao>("POST", "/api/auth/senha", {
+          corpo: { senhaAtual, novaSenha },
+        });
+        await aplicarSessao(s);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, erro: mensagemDe(e) };
+      }
+    },
+    [aplicarSessao],
+  );
+
+  const registrar = useCallback((acao: Log["acao"], modulo: string, descricao: string) => {
+    if (acao !== "Exportou" && acao !== "Visualizou") return;
+    if (!(MODULOS as readonly string[]).includes(modulo)) return;
+    void api("POST", "/api/auditoria", {
+      corpo: { acao, modulo, descricao: descricao.slice(0, 300) },
+    }).catch(() => undefined);
+  }, []);
+
+  const enviarDocumento = useCallback(async (arquivo: File, pasta: string, processo: string) => {
+    const form = new FormData();
+    form.set("arquivo", arquivo);
+    form.set("pasta", pasta);
+    if (processo) form.set("processo", processo);
     try {
-      sessionStorage.removeItem(CHAVE_SESSAO);
-    } catch {
-      /* ignora */
+      const r = await api<{ documento: Documento; versao: string }>("POST", "/api/documentos", {
+        formulario: form,
+      });
+      colecoes.current.documentos.substituirLocal(r.documento.id, r.documento);
+      return r;
+    } catch (e) {
+      toast.error(`${arquivo.name}: ${mensagemDe(e)}`);
+      return null;
     }
   }, []);
 
-  const pode = useCallback(
-    (m: Modulo): Permissao => {
-      // Regra de negócio: Financeiro é exclusivo do Advogado Administrador.
-      if (m === "Financeiro") return role === "admin" ? "editar" : "nenhum";
-      return permissoes[role][m];
+  const restaurarVersao = useCallback(async (documentoId: string, versaoId: string) => {
+    try {
+      const d = await api<Documento>(
+        "POST",
+        `/api/documentos/${documentoId}/versoes/${versaoId}/restaurar`,
+      );
+      colecoes.current.documentos.substituirLocal(d.id, d);
+      return true;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return false;
+    }
+  }, []);
+
+  const criarPasta = useCallback(async (p: Omit<Pasta, "id">) => {
+    try {
+      const criada = await api<Pasta>("POST", "/api/pastas", {
+        corpo: p,
+        idempotencia: novaChave(),
+      });
+      setPastas((prev) => [...prev, criada]);
+      return true;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return false;
+    }
+  }, []);
+
+  const anexarDocCliente = useCallback(async (clienteId: string, docId: string, arquivo: File) => {
+    const form = new FormData();
+    form.set("arquivo", arquivo);
+    try {
+      const c = await api<Cliente>(
+        "POST",
+        `/api/clientes/${clienteId}/documentos/${docId}/arquivo`,
+        { formulario: form },
+      );
+      colecoes.current.clientes.substituirLocal(c.id, c);
+      return true;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return false;
+    }
+  }, []);
+
+  const criarUsuario = useCallback(
+    async (d: { nome: string; email: string; oab?: string; role: Role }) => {
+      try {
+        const r = await api<{ usuario: Usuario; senhaTemporaria: string }>(
+          "POST",
+          "/api/usuarios",
+          { corpo: d },
+        );
+        setUsuarios((prev) => [...prev, r.usuario]);
+        return r.senhaTemporaria;
+      } catch (e) {
+        toast.error(mensagemDe(e));
+        return null;
+      }
     },
-    [role, permissoes],
+    [],
   );
+
+  const atualizarUsuario = useCallback(async (id: string, d: { role?: Role; ativo?: boolean }) => {
+    try {
+      const u = await api<Usuario>("PATCH", `/api/usuarios/${id}`, { corpo: d });
+      setUsuarios((prev) => prev.map((x) => (x.id === id ? u : x)));
+      return true;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return false;
+    }
+  }, []);
+
+  const redefinirSenhaUsuario = useCallback(async (id: string) => {
+    try {
+      return (await api<{ senhaTemporaria: string }>("POST", `/api/usuarios/${id}/senha`))
+        .senhaTemporaria;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return null;
+    }
+  }, []);
+
+  const alterarPermissao = useCallback(async (r: Role, modulo: Modulo, nivel: Permissao) => {
+    try {
+      setPermissoes(
+        await api<MatrizPermissoes>("PUT", "/api/permissoes", {
+          corpo: { role: r, modulo, nivel },
+        }),
+      );
+      return true;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return false;
+    }
+  }, []);
 
   const value = useMemo<AppState>(
     () => ({
       role,
       isAdmin: role === "admin",
-      usuario,
-      trocarPerfil,
+      usuario: sessao?.usuario.nome ?? "",
       theme,
       toggleTheme,
       pode,
       logado,
+      carregando,
+      deveTrocarSenha: !!sessao?.usuario.deveTrocarSenha,
       entrar,
       sair,
-      processos,
-      setProcessos,
-      tarefas,
-      setTarefas,
-      eventos,
-      setEventos,
-      clientes,
-      setClientes,
-      documentos,
-      setDocumentos,
+      trocarSenha,
+      processos: processos.lista,
+      setProcessos: processos.definir,
+      criarProcesso: processos.criar,
+      tarefas: tarefas.lista,
+      setTarefas: tarefas.definir,
+      eventos: eventos.lista,
+      setEventos: eventos.definir,
+      clientes: clientes.lista,
+      setClientes: clientes.definir,
+      criarCliente: clientes.criar,
+      documentos: documentos.lista,
+      enviarDocumento,
+      restaurarVersao,
       pastas,
-      setPastas,
-      lancamentos,
-      setLancamentos,
-      modelos,
-      setModelos,
-      contratos,
-      setContratos,
-      intimacoes,
-      setIntimacoes,
+      criarPasta,
+      anexarDocCliente,
+      lancamentos: lancamentos.lista,
+      setLancamentos: lancamentos.definir,
+      modelos: modelos.lista,
+      setModelos: modelos.definir,
+      contratos: contratos.lista,
+      setContratos: contratos.definir,
+      intimacoes: intimacoes.lista,
+      setIntimacoes: intimacoes.definir,
       usuarios,
-      setUsuarios,
+      criarUsuario,
+      atualizarUsuario,
+      redefinirSenhaUsuario,
       permissoes,
-      setPermissoes,
+      alterarPermissao,
       logs,
+      recarregarLogs,
       registrar,
       widgets,
       setWidgets,
@@ -288,31 +596,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       role,
-      usuario,
-      trocarPerfil,
+      sessao,
       theme,
       toggleTheme,
       pode,
       logado,
+      carregando,
       entrar,
       sair,
-      processos,
-      tarefas,
-      eventos,
-      clientes,
-      documentos,
+      trocarSenha,
+      processos.lista,
+      processos.definir,
+      processos.criar,
+      tarefas.lista,
+      tarefas.definir,
+      eventos.lista,
+      eventos.definir,
+      clientes.lista,
+      clientes.definir,
+      clientes.criar,
+      documentos.lista,
+      enviarDocumento,
+      restaurarVersao,
       pastas,
-      lancamentos,
-      modelos,
-      contratos,
-      intimacoes,
+      criarPasta,
+      anexarDocCliente,
+      lancamentos.lista,
+      lancamentos.definir,
+      modelos.lista,
+      modelos.definir,
+      contratos.lista,
+      contratos.definir,
+      intimacoes.lista,
+      intimacoes.definir,
       usuarios,
+      criarUsuario,
+      atualizarUsuario,
+      redefinirSenhaUsuario,
       permissoes,
+      alterarPermissao,
       logs,
+      recarregarLogs,
       registrar,
       widgets,
+      setWidgets,
       identidade,
+      setIdentidade,
       categorias,
+      setCategorias,
     ],
   );
 

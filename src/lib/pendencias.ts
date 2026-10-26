@@ -11,10 +11,6 @@ export type Pendencia = {
   params?: Record<string, string>;
 };
 
-/**
- * Gestão proativa: reúne tudo o que precisa de atenção do usuário logado.
- * No protótipo é calculado a partir dos dados de exemplo — sem automação/back-end.
- */
 export function usePendencias() {
   const { tarefas, eventos, clientes, intimacoes, contratos, usuario, isAdmin } = useApp();
 

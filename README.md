@@ -1,24 +1,48 @@
-# Pixel Perfect Replica
+# Gestão Jurídica
 
-Implement exactly the screenshot and nothing else
+Sistema interno de gestão jurídica (processos, clientes, tarefas, agenda, audiências, documentos,
+financeiro, contratos e intimações), feito em **Next.js 16 (App Router)**, React 19 e Tailwind CSS v4,
+com backend em Route Handlers, **Prisma 7** e **PostgreSQL (Supabase)**.
 
-This project was built with [Lovable](https://lovable.dev).
+Todos os dados vêm do banco. Não há dados de exemplo nem usuário padrão.
 
-## Build with Lovable
+## Rodando localmente
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/e4212656-c59e-40dd-8deb-eab86f765502).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Precisa de Node.js 22.12+ (ou 24).
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+npm install
+cp .env.example .env.local      # ajuste DATABASE_URL e APP_ORIGIN
+npm run db:local                # (opcional) Postgres local, em outro terminal
+npm run db:migrate
+npm run db:criar-escritorio -- --escritorio "Nome do Escritório" --sigla NE --nome "Nome do Admin" --email admin@exemplo.com
+npm run dev                     # http://localhost:3000
 ```
+
+O `db:criar-escritorio` mostra uma senha temporária uma única vez; ela precisa ser trocada no primeiro acesso.
+
+## Comandos
+
+```sh
+npm test            # testes (sobe um PostgreSQL temporário próprio)
+npm run typecheck
+npm run lint
+npm run build
+npm run db:status   # situação das migrations
+```
+
+## Estrutura
+
+| Pasta | O que tem |
+| --- | --- |
+| `src/app/` | Rotas do Next (páginas) e `src/app/api/` (API REST) |
+| `src/server/` | Backend: configuração, autenticação, autorização, serviços, armazenamento de arquivos |
+| `src/views/` | Telas do sistema |
+| `src/components/` | Componentes compartilhados e `ui/` (shadcn) |
+| `src/lib/store.tsx` | Estado do app, carregado da API |
+| `src/lib/sincronia.ts` | Envia à API cada alteração feita nas listas |
+| `prisma/` | Schema e migrations versionadas |
+| `tests/` | Testes de autenticação, autorização, integridade, segurança e documentos |
+
+Arquitetura, endpoints, segurança, configuração do Supabase, produção e limitações conhecidas:
+[`docs/BACKEND.md`](docs/BACKEND.md).
