@@ -73,7 +73,7 @@ export async function criarUsuario(ctx: Contexto, d: z.infer<typeof esquemaCriar
         oab: d.oab || null,
         role: d.role,
         senhaHash: await gerarHash(senha),
-        deveTrocarSenha: true,
+        deveTrocarSenha: !d.senha,
       },
     });
     await ctx.auditarTx(tx, {
@@ -158,7 +158,7 @@ export async function redefinirSenha(
   await db().$transaction(async (tx) => {
     await tx.usuario.update({
       where: { id },
-      data: { senhaHash: await gerarHash(senha), deveTrocarSenha: true },
+      data: { senhaHash: await gerarHash(senha), deveTrocarSenha: !d.senha },
     });
     await ctx.auditarTx(tx, {
       acao: "Editou",

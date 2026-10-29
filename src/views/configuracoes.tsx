@@ -193,8 +193,8 @@ function Usuarios() {
           <DialogHeader>
             <DialogTitle>Novo usuário</DialogTitle>
             <DialogDescription>
-              Defina uma senha ou deixe em branco para gerar uma automaticamente. Entregue-a à
-              pessoa por um canal seguro: ela terá de trocá-la no primeiro acesso.
+              Defina uma senha ou deixe em branco para gerar uma automaticamente. A senha gerada
+              automaticamente terá de ser trocada no primeiro acesso.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -232,7 +232,7 @@ function Usuarios() {
                 ))}
               </select>
             </Field>
-            <Field label="Senha (opcional, mínimo 12 caracteres)">
+            <Field label="Senha (opcional, mínimo 6 caracteres)">
               <input
                 type="text"
                 autoComplete="new-password"
@@ -254,8 +254,8 @@ function Usuarios() {
                   toast.error("Informe nome e e-mail");
                   return;
                 }
-                if (f.senha && f.senha.length < 12) {
-                  toast.error("A senha precisa ter pelo menos 12 caracteres.");
+                if (f.senha && f.senha.length < 6) {
+                  toast.error("A senha precisa ter pelo menos 6 caracteres.");
                   return;
                 }
                 setSalvando(true);
@@ -289,17 +289,17 @@ function Usuarios() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Senha temporária de {senhaGerada?.nome}</DialogTitle>
+            <DialogTitle>Senha de {senhaGerada?.nome}</DialogTitle>
             <DialogDescription>
-              Ela aparece só agora. Copie e entregue por um canal seguro; a troca é obrigatória no
-              primeiro acesso.
+              Ela aparece só agora. Copie e entregue por um canal seguro, ou troque por outra senha
+              abaixo.
             </DialogDescription>
           </DialogHeader>
           <code className="block select-all rounded-lg bg-accent px-3 py-2 text-center font-mono text-sm">
             {senhaGerada?.senha}
           </code>
           {isAdmin && senhaGerada?.nome !== usuario && (
-            <Field label="Trocar por outra senha (mínimo 12 caracteres)">
+            <Field label="Trocar por outra senha (mínimo 6 caracteres)">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -313,8 +313,8 @@ function Usuarios() {
                   disabled={salvando || !novaSenha}
                   onClick={async () => {
                     if (!senhaGerada) return;
-                    if (novaSenha.length < 12) {
-                      toast.error("A senha precisa ter pelo menos 12 caracteres.");
+                    if (novaSenha.length < 6) {
+                      toast.error("A senha precisa ter pelo menos 6 caracteres.");
                       return;
                     }
                     setSalvando(true);

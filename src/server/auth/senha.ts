@@ -19,21 +19,10 @@ export async function conferirSenha(senhaHash: string | undefined, senha: string
   return verify(senhaHash, senha).catch(() => false);
 }
 
-const COMUNS = new Set([
-  "123456789012",
-  "senhasenha12",
-  "password1234",
-  "qwertyuiop12",
-  "admin1234567",
-  "000000000000",
-]);
-
 export const senhaForte = z
   .string()
-  .min(12, "A senha precisa ter pelo menos 12 caracteres.")
-  .max(128, "A senha pode ter no máximo 128 caracteres.")
-  .refine((s) => !COMUNS.has(s.toLowerCase()), "Escolha uma senha menos previsível.")
-  .refine((s) => new Set(s).size >= 5, "Escolha uma senha menos previsível.");
+  .min(6, "A senha precisa ter pelo menos 6 caracteres.")
+  .max(128, "A senha pode ter no máximo 128 caracteres.");
 
 export function senhaTemporaria() {
   const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";

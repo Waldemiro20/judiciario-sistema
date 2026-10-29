@@ -16,7 +16,7 @@ export function TrocarSenha() {
 
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (nova.length < 12) return setErro("A nova senha precisa ter pelo menos 12 caracteres.");
+    if (nova.length < 6) return setErro("A nova senha precisa ter pelo menos 6 caracteres.");
     if (nova !== confirma) return setErro("A confirmação não confere com a nova senha.");
     setEnviando(true);
     setErro("");
@@ -47,10 +47,7 @@ export function TrocarSenha() {
             onChange={(e) => setAtual(e.target.value)}
           />
         </Field>
-        <Field
-          label="Nova senha"
-          hint="Mínimo de 12 caracteres. Uma frase longa é uma boa escolha."
-        >
+        <Field label="Nova senha" hint="Mínimo de 6 caracteres.">
           <input
             type="password"
             autoComplete="new-password"
