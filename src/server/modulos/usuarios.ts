@@ -172,6 +172,44 @@ export async function redefinirSenha(
   return { senhaTemporaria: senha };
 }
 
+export async function excluirUsuario(ctx: Contexto, id: string) {
+  if (ctx.usuario.role !== "admin")
+    throw erro.proibido("Só um administrador pode excluir usuários.");
+  if (id === ctx.usuario.id) throw erro.proibido("Você não pode excluir a si mesmo.");
+  const alvo = await db().usuario.findFirst({
+    where: { id, escritorioId: ctx.usuario.escritorioId },
+  });
+  if (!alvo) throw erro.naoEncontrado();
+  if (alvo.role === "admin" && alvo.ativo && (await adminsAtivos(ctx.usuario.escritorioId)) <= 1)
+    throw erro.conflito("O escritório precisa de pelo menos um administrador ativo.");
+  const [processos, tarefas, eventos] = await Promise.all([
+    db().processo.count({ where: { responsavelId: id } }),
+    db().tarefa.count({ where: { responsavelId: id } }),
+    db().evento.count({ where: { advogadoId: id } }),
+  ]);
+  const vinculos = [
+    processos && `${processos} processo(s)`,
+    tarefas && `${tarefas} tarefa(s)`,
+    eventos && `${eventos} evento(s) da agenda`,
+  ].filter(Boolean);
+  if (vinculos.length)
+    throw erro.conflito(
+      `${alvo.nome} é responsável por ${vinculos.join(", ")}. Transfira-os para outra pessoa ou apenas inative o usuário.`,
+    );
+  await db().$transaction(async (tx) => {
+    await tx.processoEquipe.deleteMany({ where: { usuarioId: id } });
+    await tx.pastaAcesso.deleteMany({ where: { usuarioId: id } });
+    await tx.usuario.delete({ where: { id } });
+    await ctx.auditarTx(tx, {
+      acao: "Excluiu",
+      modulo: "Configurações",
+      descricao: `Excluiu o usuário ${alvo.nome} (${alvo.role})`,
+      recursoTipo: "Usuario",
+      recursoId: id,
+    });
+  });
+}
+
 export const esquemaListarAuditoria = z
   .object({
     modulo: z.string().max(60).optional(),

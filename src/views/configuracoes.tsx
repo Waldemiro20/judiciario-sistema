@@ -1,6 +1,16 @@
 "use client";
 
-import { Database, KeyRound, Lock, Plus, Search, ShieldCheck, UserPlus, X } from "lucide-react";
+import {
+  Database,
+  KeyRound,
+  Lock,
+  Plus,
+  Search,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
@@ -16,6 +26,16 @@ import {
   selectCls,
   type Tone,
 } from "@/components/kit";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,7 +55,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MODULOS, ROLE_LABEL, type Log, type Permissao, type Role } from "@/lib/data";
+import { MODULOS, ROLE_LABEL, type Log, type Permissao, type Role, type Usuario } from "@/lib/data";
 import { api, mensagemDe } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -85,16 +105,21 @@ function ConfiguracoesPage() {
 }
 
 function Usuarios() {
-  const { usuarios, criarUsuario, atualizarUsuario, redefinirSenhaUsuario, usuario, isAdmin } =
-    useApp();
+  const {
+    usuarios,
+    criarUsuario,
+    atualizarUsuario,
+    redefinirSenhaUsuario,
+    excluirUsuario,
+    usuario,
+    isAdmin,
+  } = useApp();
   const [novo, setNovo] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [senhaGerada, setSenhaGerada] = useState<{
-    id: string;
-    nome: string;
-    senha: string;
-  } | null>(null);
+  const [senhaGerada, setSenhaGerada] = useState<{ nome: string; senha: string } | null>(null);
+  const [redefinindo, setRedefinindo] = useState<Usuario | null>(null);
   const [novaSenha, setNovaSenha] = useState("");
+  const [excluindo, setExcluindo] = useState<Usuario | null>(null);
   const [f, setF] = useState({
     nome: "",
     email: "",
@@ -168,18 +193,24 @@ function Usuarios() {
                 </TableCell>
                 <TableCell>
                   {isAdmin && u.nome !== usuario && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-xs"
-                      onClick={() =>
-                        void redefinirSenhaUsuario(u.id).then(
-                          (senha) => senha && setSenhaGerada({ id: u.id, nome: u.nome, senha }),
-                        )
-                      }
-                    >
-                      <KeyRound className="size-3.5" /> Redefinir senha
-                    </Button>
+                    <span className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs"
+                        onClick={() => setRedefinindo(u)}
+                      >
+                        <KeyRound className="size-3.5" /> Redefinir senha
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs text-[var(--critical)]"
+                        onClick={() => setExcluindo(u)}
+                      >
+                        <Trash2 className="size-3.5" /> Excluir
+                      </Button>
+                    </span>
                   )}
                 </TableCell>
               </TableRow>
@@ -193,8 +224,8 @@ function Usuarios() {
           <DialogHeader>
             <DialogTitle>Novo usuário</DialogTitle>
             <DialogDescription>
-              Defina uma senha ou deixe em branco para gerar uma automaticamente. A senha gerada
-              automaticamente terá de ser trocada no primeiro acesso.
+              Defina a senha de acesso. Se deixar em branco, uma senha será gerada automaticamente e
+              terá de ser trocada no primeiro acesso.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -232,7 +263,7 @@ function Usuarios() {
                 ))}
               </select>
             </Field>
-            <Field label="Senha (opcional, mínimo 6 caracteres)">
+            <Field label="Senha (mínimo 6 caracteres)">
               <input
                 type="text"
                 autoComplete="new-password"
@@ -268,7 +299,8 @@ function Usuarios() {
                 });
                 setSalvando(false);
                 if (!r) return;
-                setSenhaGerada({ id: r.id, nome: f.nome.trim(), senha: r.senha });
+                if (f.senha) toast.success(`Usuário ${f.nome.trim()} criado`);
+                else setSenhaGerada({ nome: f.nome.trim(), senha: r.senha });
                 setF({ nome: "", email: "", oab: "", senha: "", role: "advogado" });
                 setNovo(false);
               }}
@@ -280,57 +312,77 @@ function Usuarios() {
       </Dialog>
 
       <Dialog
-        open={!!senhaGerada}
+        open={!!redefinindo}
         onOpenChange={(o) => {
           if (o) return;
-          setSenhaGerada(null);
+          setRedefinindo(null);
           setNovaSenha("");
         }}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Senha de {senhaGerada?.nome}</DialogTitle>
+            <DialogTitle>Redefinir senha de {redefinindo?.nome}</DialogTitle>
             <DialogDescription>
-              Ela aparece só agora. Copie e entregue por um canal seguro, ou troque por outra senha
-              abaixo.
+              Digite a nova senha. Se deixar em branco, uma senha será gerada automaticamente e terá
+              de ser trocada no próximo acesso.
+            </DialogDescription>
+          </DialogHeader>
+          <Field label="Nova senha (mínimo 6 caracteres)">
+            <input
+              type="text"
+              autoComplete="new-password"
+              className={inputCls}
+              value={novaSenha}
+              placeholder="Em branco: gerar automaticamente"
+              onChange={(e) => setNovaSenha(e.target.value)}
+            />
+          </Field>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRedefinindo(null);
+                setNovaSenha("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={salvando}
+              onClick={async () => {
+                if (!redefinindo) return;
+                if (novaSenha && novaSenha.length < 6) {
+                  toast.error("A senha precisa ter pelo menos 6 caracteres.");
+                  return;
+                }
+                setSalvando(true);
+                const senha = await redefinirSenhaUsuario(redefinindo.id, novaSenha || undefined);
+                setSalvando(false);
+                if (!senha) return;
+                if (novaSenha) toast.success(`Senha de ${redefinindo.nome} alterada`);
+                else setSenhaGerada({ nome: redefinindo.nome, senha });
+                setRedefinindo(null);
+                setNovaSenha("");
+              }}
+            >
+              Salvar senha
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!senhaGerada} onOpenChange={(o) => !o && setSenhaGerada(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Senha temporária de {senhaGerada?.nome}</DialogTitle>
+            <DialogDescription>
+              Ela aparece só agora. Copie e entregue por um canal seguro; a troca é obrigatória no
+              primeiro acesso.
             </DialogDescription>
           </DialogHeader>
           <code className="block select-all rounded-lg bg-accent px-3 py-2 text-center font-mono text-sm">
             {senhaGerada?.senha}
           </code>
-          {isAdmin && senhaGerada?.nome !== usuario && (
-            <Field label="Trocar por outra senha (mínimo 6 caracteres)">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  autoComplete="new-password"
-                  className={inputCls}
-                  value={novaSenha}
-                  onChange={(e) => setNovaSenha(e.target.value)}
-                />
-                <Button
-                  variant="outline"
-                  disabled={salvando || !novaSenha}
-                  onClick={async () => {
-                    if (!senhaGerada) return;
-                    if (novaSenha.length < 6) {
-                      toast.error("A senha precisa ter pelo menos 6 caracteres.");
-                      return;
-                    }
-                    setSalvando(true);
-                    const senha = await redefinirSenhaUsuario(senhaGerada.id, novaSenha);
-                    setSalvando(false);
-                    if (!senha) return;
-                    setSenhaGerada({ ...senhaGerada, senha });
-                    setNovaSenha("");
-                    toast.success("Senha alterada");
-                  }}
-                >
-                  Trocar
-                </Button>
-              </div>
-            </Field>
-          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -342,17 +394,38 @@ function Usuarios() {
             >
               Copiar
             </Button>
-            <Button
-              onClick={() => {
-                setSenhaGerada(null);
-                setNovaSenha("");
-              }}
-            >
-              Pronto
-            </Button>
+            <Button onClick={() => setSenhaGerada(null)}>Pronto</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!excluindo} onOpenChange={(o) => !o && setExcluindo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground">{excluindo?.nome}</strong> será excluído
+              definitivamente e perderá o acesso ao sistema. Essa ação não pode ser desfeita. Se
+              quiser apenas bloquear o acesso, use a opção Ativo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--critical)] text-white hover:bg-[var(--critical)]/90"
+              onClick={() => {
+                if (!excluindo) return;
+                const alvo = excluindo;
+                void excluirUsuario(alvo.id).then(
+                  (ok) => ok && toast.success(`Usuário ${alvo.nome} excluído`),
+                );
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Panel>
   );
 }

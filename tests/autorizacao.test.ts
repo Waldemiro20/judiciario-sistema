@@ -219,6 +219,58 @@ describe("autorização", () => {
     ).toBe(1);
   });
 
+  it("admin exclui usuário sem vínculos, mas não a si mesmo nem quem é responsável por processos", async () => {
+    const outro = await cenario();
+    const livre = await novoUsuario(outro.escritorioId, "estagiario");
+    const negado = await chamar(usuario.DELETE, {
+      metodo: "DELETE",
+      cookie: outro.cookieAdvogado,
+      params: { id: livre.id },
+    });
+    expect(negado.status).toBe(403);
+    const excluir = await chamar(usuario.DELETE, {
+      metodo: "DELETE",
+      cookie: outro.cookieAdmin,
+      params: { id: livre.id },
+    });
+    expect(excluir.status).toBe(204);
+    expect(await db().usuario.findUnique({ where: { id: livre.id } })).toBeNull();
+    const proprio = await chamar(usuario.DELETE, {
+      metodo: "DELETE",
+      cookie: outro.cookieAdmin,
+      params: { id: outro.admin.id },
+    });
+    expect(proprio.status).toBe(403);
+    const cliente = await novoCliente(outro.escritorioId);
+    const criado = await chamar(processos.POST, {
+      cookie: outro.cookieAdvogado,
+      corpo: novoProcesso(outro, cliente.nome),
+    });
+    expect(criado.status).toBe(201);
+    const comVinculo = await chamar(usuario.DELETE, {
+      metodo: "DELETE",
+      cookie: outro.cookieAdmin,
+      params: { id: outro.advogado.id },
+    });
+    expect(comVinculo.status).toBe(409);
+  });
+
+  it("senha definida pelo admin vale sem troca obrigatória", async () => {
+    const outro = await cenario();
+    const r = await chamar(usuarios.POST, {
+      cookie: outro.cookieAdmin,
+      corpo: {
+        nome: "Nova Pessoa",
+        email: `nova-${Date.now()}@teste.local`,
+        role: "advogado",
+        senha: "abc123",
+      },
+    });
+    expect(r.status).toBe(201);
+    const u = await db().usuario.findUniqueOrThrow({ where: { id: r.json.usuario.id } });
+    expect(u.deveTrocarSenha).toBe(false);
+  });
+
   it("alteração de permissão pelo admin vale na hora e fica auditada", async () => {
     const antes = await chamar(clientes.POST, {
       cookie: a.cookieEstagiario,

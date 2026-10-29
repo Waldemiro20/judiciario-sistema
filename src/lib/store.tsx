@@ -118,6 +118,7 @@ type AppState = {
   }) => Promise<{ id: string; senha: string } | null>;
   atualizarUsuario: (id: string, d: { role?: Role; ativo?: boolean }) => Promise<boolean>;
   redefinirSenhaUsuario: (id: string, senha?: string) => Promise<string | null>;
+  excluirUsuario: (id: string) => Promise<boolean>;
   permissoes: MatrizPermissoes;
   alterarPermissao: (role: Role, modulo: Modulo, nivel: Permissao) => Promise<boolean>;
   logs: Log[];
@@ -530,6 +531,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const excluirUsuario = useCallback(async (id: string) => {
+    try {
+      await api("DELETE", `/api/usuarios/${id}`);
+      setUsuarios((prev) => prev.filter((x) => x.id !== id));
+      return true;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return false;
+    }
+  }, []);
+
   const alterarPermissao = useCallback(async (r: Role, modulo: Modulo, nivel: Permissao) => {
     try {
       setPermissoes(
@@ -586,6 +598,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       criarUsuario,
       atualizarUsuario,
       redefinirSenhaUsuario,
+      excluirUsuario,
       permissoes,
       alterarPermissao,
       logs,
@@ -637,6 +650,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       criarUsuario,
       atualizarUsuario,
       redefinirSenhaUsuario,
+      excluirUsuario,
       permissoes,
       alterarPermissao,
       logs,
