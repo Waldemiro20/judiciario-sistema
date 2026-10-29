@@ -89,8 +89,19 @@ function Usuarios() {
     useApp();
   const [novo, setNovo] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [senhaGerada, setSenhaGerada] = useState<{ nome: string; senha: string } | null>(null);
-  const [f, setF] = useState({ nome: "", email: "", oab: "", role: "advogado" as Role });
+  const [senhaGerada, setSenhaGerada] = useState<{
+    id: string;
+    nome: string;
+    senha: string;
+  } | null>(null);
+  const [novaSenha, setNovaSenha] = useState("");
+  const [f, setF] = useState({
+    nome: "",
+    email: "",
+    oab: "",
+    senha: "",
+    role: "advogado" as Role,
+  });
 
   return (
     <Panel
@@ -163,7 +174,7 @@ function Usuarios() {
                       className="h-8 text-xs"
                       onClick={() =>
                         void redefinirSenhaUsuario(u.id).then(
-                          (senha) => senha && setSenhaGerada({ nome: u.nome, senha }),
+                          (senha) => senha && setSenhaGerada({ id: u.id, nome: u.nome, senha }),
                         )
                       }
                     >
@@ -182,8 +193,8 @@ function Usuarios() {
           <DialogHeader>
             <DialogTitle>Novo usuário</DialogTitle>
             <DialogDescription>
-              Uma senha temporária será gerada. Entregue-a à pessoa por um canal seguro: ela terá de
-              trocá-la no primeiro acesso.
+              Defina uma senha ou deixe em branco para gerar uma automaticamente. Entregue-a à
+              pessoa por um canal seguro: ela terá de trocá-la no primeiro acesso.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -221,6 +232,16 @@ function Usuarios() {
                 ))}
               </select>
             </Field>
+            <Field label="Senha (opcional, mínimo 12 caracteres)">
+              <input
+                type="text"
+                autoComplete="new-password"
+                className={inputCls}
+                value={f.senha}
+                placeholder="Em branco: gerar automaticamente"
+                onChange={(e) => setF({ ...f, senha: e.target.value })}
+              />
+            </Field>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setNovo(false)}>
@@ -233,17 +254,22 @@ function Usuarios() {
                   toast.error("Informe nome e e-mail");
                   return;
                 }
+                if (f.senha && f.senha.length < 12) {
+                  toast.error("A senha precisa ter pelo menos 12 caracteres.");
+                  return;
+                }
                 setSalvando(true);
-                const senha = await criarUsuario({
+                const r = await criarUsuario({
                   nome: f.nome.trim(),
                   email: f.email.trim(),
                   ...(f.oab.trim() && { oab: f.oab.trim() }),
                   role: f.role,
+                  ...(f.senha && { senha: f.senha }),
                 });
                 setSalvando(false);
-                if (!senha) return;
-                setSenhaGerada({ nome: f.nome.trim(), senha });
-                setF({ nome: "", email: "", oab: "", role: "advogado" });
+                if (!r) return;
+                setSenhaGerada({ id: r.id, nome: f.nome.trim(), senha: r.senha });
+                setF({ nome: "", email: "", oab: "", senha: "", role: "advogado" });
                 setNovo(false);
               }}
             >
@@ -253,7 +279,14 @@ function Usuarios() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!senhaGerada} onOpenChange={(o) => !o && setSenhaGerada(null)}>
+      <Dialog
+        open={!!senhaGerada}
+        onOpenChange={(o) => {
+          if (o) return;
+          setSenhaGerada(null);
+          setNovaSenha("");
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Senha temporária de {senhaGerada?.nome}</DialogTitle>
@@ -265,6 +298,39 @@ function Usuarios() {
           <code className="block select-all rounded-lg bg-accent px-3 py-2 text-center font-mono text-sm">
             {senhaGerada?.senha}
           </code>
+          {isAdmin && senhaGerada?.nome !== usuario && (
+            <Field label="Trocar por outra senha (mínimo 12 caracteres)">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  autoComplete="new-password"
+                  className={inputCls}
+                  value={novaSenha}
+                  onChange={(e) => setNovaSenha(e.target.value)}
+                />
+                <Button
+                  variant="outline"
+                  disabled={salvando || !novaSenha}
+                  onClick={async () => {
+                    if (!senhaGerada) return;
+                    if (novaSenha.length < 12) {
+                      toast.error("A senha precisa ter pelo menos 12 caracteres.");
+                      return;
+                    }
+                    setSalvando(true);
+                    const senha = await redefinirSenhaUsuario(senhaGerada.id, novaSenha);
+                    setSalvando(false);
+                    if (!senha) return;
+                    setSenhaGerada({ ...senhaGerada, senha });
+                    setNovaSenha("");
+                    toast.success("Senha alterada");
+                  }}
+                >
+                  Trocar
+                </Button>
+              </div>
+            </Field>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -276,7 +342,14 @@ function Usuarios() {
             >
               Copiar
             </Button>
-            <Button onClick={() => setSenhaGerada(null)}>Pronto</Button>
+            <Button
+              onClick={() => {
+                setSenhaGerada(null);
+                setNovaSenha("");
+              }}
+            >
+              Pronto
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

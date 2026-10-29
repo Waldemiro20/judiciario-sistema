@@ -4,7 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { db } from "../db";
 import { erro } from "../http/erros";
 import { permite } from "../authz/permissoes";
-import { gerarHash, senhaTemporaria } from "../auth/senha";
+import { gerarHash, senhaForte, senhaTemporaria } from "../auth/senha";
 import { revogarSessoesDoUsuario } from "../auth/sessao";
 import type { Contexto } from "../http/rota";
 import type { Paginacao } from "../http/corpo";
@@ -18,8 +18,11 @@ export const esquemaCriarUsuario = z
     email: z.string().trim().toLowerCase().email().max(254),
     oab: texto(40).optional(),
     role: z.enum(ROLES),
+    senha: senhaForte.optional(),
   })
   .strict();
+
+export const esquemaRedefinirSenha = z.object({ senha: senhaForte.optional() }).strict();
 
 export const esquemaAtualizarUsuario = z
   .object({
@@ -60,7 +63,7 @@ async function adminsAtivos(escritorioId: string) {
 export async function criarUsuario(ctx: Contexto, d: z.infer<typeof esquemaCriarUsuario>) {
   if (d.role === "admin" && ctx.usuario.role !== "admin")
     throw erro.proibido("Só um administrador pode criar outro administrador.");
-  const senha = senhaTemporaria();
+  const senha = d.senha ?? senhaTemporaria();
   const u = await db().$transaction(async (tx) => {
     const u = await tx.usuario.create({
       data: {
@@ -138,7 +141,11 @@ export async function atualizarUsuario(
   return paraFront(u, true);
 }
 
-export async function redefinirSenha(ctx: Contexto, id: string) {
+export async function redefinirSenha(
+  ctx: Contexto,
+  id: string,
+  d: z.infer<typeof esquemaRedefinirSenha> = {},
+) {
   if (ctx.usuario.role !== "admin")
     throw erro.proibido("Só um administrador pode redefinir senhas.");
   if (id === ctx.usuario.id)
@@ -147,7 +154,7 @@ export async function redefinirSenha(ctx: Contexto, id: string) {
     where: { id, escritorioId: ctx.usuario.escritorioId },
   });
   if (!alvo) throw erro.naoEncontrado();
-  const senha = senhaTemporaria();
+  const senha = d.senha ?? senhaTemporaria();
   await db().$transaction(async (tx) => {
     await tx.usuario.update({
       where: { id },

@@ -114,9 +114,10 @@ type AppState = {
     email: string;
     oab?: string;
     role: Role;
-  }) => Promise<string | null>;
+    senha?: string;
+  }) => Promise<{ id: string; senha: string } | null>;
   atualizarUsuario: (id: string, d: { role?: Role; ativo?: boolean }) => Promise<boolean>;
-  redefinirSenhaUsuario: (id: string) => Promise<string | null>;
+  redefinirSenhaUsuario: (id: string, senha?: string) => Promise<string | null>;
   permissoes: MatrizPermissoes;
   alterarPermissao: (role: Role, modulo: Modulo, nivel: Permissao) => Promise<boolean>;
   logs: Log[];
@@ -488,7 +489,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const criarUsuario = useCallback(
-    async (d: { nome: string; email: string; oab?: string; role: Role }) => {
+    async (d: { nome: string; email: string; oab?: string; role: Role; senha?: string }) => {
       try {
         const r = await api<{ usuario: Usuario; senhaTemporaria: string }>(
           "POST",
@@ -496,7 +497,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           { corpo: d },
         );
         setUsuarios((prev) => [...prev, r.usuario]);
-        return r.senhaTemporaria;
+        return { id: r.usuario.id, senha: r.senhaTemporaria };
       } catch (e) {
         toast.error(mensagemDe(e));
         return null;
@@ -516,10 +517,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const redefinirSenhaUsuario = useCallback(async (id: string) => {
+  const redefinirSenhaUsuario = useCallback(async (id: string, senha?: string) => {
     try {
-      return (await api<{ senhaTemporaria: string }>("POST", `/api/usuarios/${id}/senha`))
-        .senhaTemporaria;
+      return (
+        await api<{ senhaTemporaria: string }>("POST", `/api/usuarios/${id}/senha`, {
+          ...(senha && { corpo: { senha } }),
+        })
+      ).senhaTemporaria;
     } catch (e) {
       toast.error(mensagemDe(e));
       return null;
