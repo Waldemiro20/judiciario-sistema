@@ -333,6 +333,7 @@ function Usuarios() {
               autoComplete="new-password"
               className={inputCls}
               value={novaSenha}
+              placeholder="Em branco: gerar automaticamente"
               onChange={(e) => setNovaSenha(e.target.value)}
             />
           </Field>
