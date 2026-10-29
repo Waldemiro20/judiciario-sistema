@@ -51,7 +51,7 @@ no primeiro acesso. Não existe usuário ou senha padrão.
 
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
-| `DATABASE_URL` | sim | Conexão usada pela aplicação. No Supabase, use o pooler (Supavisor) em modo sessão, porta 5432, ou o modo transação, porta 6543, em ambientes serverless |
+| `DATABASE_URL` | sim | Conexão usada pela aplicação. Na Vercel (serverless) use o pooler do Supabase em **modo transação, porta 6543**, com `DATABASE_POOL_MAX=1`: o modo sessão (porta 5432) limita o total de clientes (15 no plano gratuito) e esgota com várias funções abertas ao mesmo tempo (`EMAXCONNSESSION`). No modo transação o `statement_timeout` por conexão não é aplicado; vale o padrão do Supabase. Localmente, a porta 5432 serve |
 | `DIRECT_URL` | para migrations | Conexão direta (`db.<projeto>.supabase.co:5432`), usada só pela CLI do Prisma (`prisma.config.ts`) |
 | `DATABASE_POOL_MAX` | não | Conexões por instância (padrão 5) |
 | `DATABASE_SSL_CA` | não | Certificado raiz (PEM) para verificar o TLS do banco. Com `sslmode` na URL a verificação é sempre completa; para hosts `*.supabase.co`/`*.supabase.com` a raiz pública do Supabase já vem embutida em `src/server/certificados.ts`. Variáveis vazias são tratadas como ausentes. |
