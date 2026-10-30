@@ -10,15 +10,27 @@ import {
   MapPin,
   Pencil,
   Plus,
+  Trash2,
   User,
   Users,
   Video,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { EventoDialog } from "@/components/EventoDialog";
 import { Avatar, Chip, Empty, NotaPrototipo, Panel, Segmented } from "@/components/kit";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DIAS_SEMANA } from "@/lib/agenda";
 import { diasAte, fmtDMY, parseISO, type Evento } from "@/lib/data";
 import { useApp } from "@/lib/store";
@@ -42,7 +54,8 @@ function disparo(e: Evento, lembrete: string) {
 }
 
 function AudienciasPage() {
-  const { eventos, processos, usuario, pode } = useApp();
+  const { eventos, setEventos, processos, usuario, pode } = useApp();
+  const [excluindo, setExcluindo] = useState<Evento | null>(null);
   const [filtro, setFiltro] = useState<"Próximas" | "Minhas" | "Realizadas">("Próximas");
   const [selecionada, setSelecionada] = useState<string | null>(null);
   const [form, setForm] = useState<{ open: boolean; editar: Evento | null }>({
@@ -148,13 +161,23 @@ function AudienciasPage() {
               title="Ficha da audiência"
               action={
                 podeEditar && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setForm({ open: true, editar: atual })}
-                  >
-                    <Pencil className="size-3.5" /> Editar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-[var(--critical)] hover:bg-[var(--critical-soft)] hover:text-[var(--critical)]"
+                      onClick={() => setExcluindo(atual)}
+                    >
+                      <Trash2 className="size-3.5" /> Excluir
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setForm({ open: true, editar: atual })}
+                    >
+                      <Pencil className="size-3.5" /> Editar
+                    </Button>
+                  </div>
                 )
               }
               delay={60}
@@ -279,6 +302,38 @@ function AudienciasPage() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!excluindo} onOpenChange={(o) => !o && setExcluindo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir audiência?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {excluindo && (
+                <>
+                  <strong className="text-foreground">{excluindo.titulo}</strong> (
+                  {fmtDMY(excluindo.data)} às {excluindo.hora}) será removida das Audiências e da
+                  Agenda.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--critical)] text-white hover:bg-[var(--critical)]/90"
+              onClick={() => {
+                if (!excluindo) return;
+                setEventos((prev) => prev.filter((e) => e.id !== excluindo.id));
+                if (selecionada === excluindo.id) setSelecionada(null);
+                toast.success("Audiência excluída", { description: excluindo.titulo });
+                setExcluindo(null);
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <EventoDialog
         open={form.open}
