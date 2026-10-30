@@ -11,6 +11,9 @@ export class ErroApi extends Error {
   }
 }
 
+export const LIMITE_UPLOAD = 4 * 1024 * 1024;
+export const MSG_LIMITE_UPLOAD = "Arquivo grande demais. O limite é 4 MB.";
+
 let aoPerderSessao: (() => void) | undefined;
 
 export function quandoPerderSessao(fn: () => void) {
@@ -54,13 +57,23 @@ export async function api<T>(metodo: string, caminho: string, opcoes: Opcoes = {
   if (!res.ok) {
     const e = (
       dados as
-        { erro?: { codigo?: string; mensagem?: string; detalhes?: DetalheErro[] } } | undefined
+        | {
+            erro?: {
+              codigo?: string;
+              mensagem?: string;
+              detalhes?: DetalheErro[];
+              requestId?: string;
+            };
+          }
+        | undefined
     )?.erro;
     if (res.status === 401 && !opcoes.silencioso401) aoPerderSessao?.();
     throw new ErroApi(
       res.status,
       e?.codigo ?? "ERRO",
-      e?.mensagem ?? "Não foi possível concluir a operação.",
+      (e?.mensagem ??
+        (res.status === 413 ? MSG_LIMITE_UPLOAD : "Não foi possível concluir a operação.")) +
+        (e?.codigo === "ERRO_INTERNO" && e.requestId ? ` Código: ${e.requestId}` : ""),
       e?.detalhes,
     );
   }

@@ -206,7 +206,13 @@ export async function atualizarCliente(
         const existente = porId.get(x.id);
         if (!existente)
           await tx.docPessoal.create({
-            data: { clienteId: id, nome: x.nome, obrigatorio: x.obrigatorio, ordem },
+            data: {
+              ...(z.string().uuid().safeParse(x.id).success && { id: x.id }),
+              clienteId: id,
+              nome: x.nome,
+              obrigatorio: x.obrigatorio,
+              ordem,
+            },
           });
         else
           await tx.docPessoal.update({

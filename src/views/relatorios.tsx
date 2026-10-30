@@ -15,7 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AREAS, brl, fluxoDeCaixa, minToH } from "@/lib/data";
+import { AREAS, brl, fluxoDeCaixa, fmtDMY, minToH } from "@/lib/data";
+import { baixar, gerarPdf, gerarXlsx, nomeArquivo, type Tabela } from "@/lib/exportar";
 import { MESES } from "@/lib/agenda";
 import { useApp } from "@/lib/store";
 
@@ -31,16 +32,32 @@ function RelatoriosPage() {
   const { pode, isAdmin, processos, tarefas, eventos, usuarios, lancamentos, registrar } = useApp();
   const periodos = useMemo(() => {
     const n = new Date();
-    const mes = (d: Date) =>
-      `${MESES[d.getMonth()]![0]!.toUpperCase()}${MESES[d.getMonth()]!.slice(1)}/${d.getFullYear()}`;
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const mes = (d: Date) => ({
+      nome: `${MESES[d.getMonth()]![0]!.toUpperCase()}${MESES[d.getMonth()]!.slice(1)}/${d.getFullYear()}`,
+      de: iso(new Date(d.getFullYear(), d.getMonth(), 1)),
+      ate: iso(new Date(d.getFullYear(), d.getMonth() + 1, 0)),
+    });
     return [
       mes(n),
       mes(new Date(n.getFullYear(), n.getMonth() - 1, 1)),
-      "Últimos 6 meses",
-      String(n.getFullYear()),
+      {
+        nome: "Últimos 6 meses",
+        de: iso(new Date(n.getFullYear(), n.getMonth() - 5, 1)),
+        ate: iso(new Date(n.getFullYear(), n.getMonth() + 1, 0)),
+      },
+      {
+        nome: String(n.getFullYear()),
+        de: `${n.getFullYear()}-01-01`,
+        ate: `${n.getFullYear()}-12-31`,
+      },
     ];
   }, []);
-  const [periodo, setPeriodo] = useState(periodos[0]!);
+  const [nomePeriodo, setNomePeriodo] = useState(periodos[0]!.nome);
+  const sel = periodos.find((p) => p.nome === nomePeriodo) ?? periodos[0]!;
+  const periodo = sel.nome;
+  const noPeriodo = (data: string) => !!data && data >= sel.de && data <= sel.ate;
 
   if (pode("Relatórios") === "nenhum")
     return (
@@ -49,9 +66,113 @@ function RelatoriosPage() {
       </AppShell>
     );
 
+  const tarefasPeriodo = tarefas.filter((t) => noPeriodo(t.prazo));
+  const audienciasPeriodo = eventos
+    .filter((e) => e.tipo === "Audiência" && noPeriodo(e.data))
+    .sort((a, b) => (a.data + a.hora).localeCompare(b.data + b.hora));
+  const lancamentosPeriodo = lancamentos.filter((l) => noPeriodo(l.vencimento));
+
+  const porArea = AREAS.map((a) => ({
+    area: a,
+    total: processos.filter((p) => p.area === a).length,
+  }));
+  const produtividade = usuarios.map((u) => {
+    const ts = tarefasPeriodo.filter((t) => t.responsavel === u.nome);
+    return {
+      nome: u.nome,
+      concluidas: ts.filter((t) => t.coluna === "Concluído").length,
+      abertas: ts.filter((t) => t.coluna !== "Concluído").length,
+      minutos: tarefasPeriodo
+        .flatMap((t) => t.apontamentos)
+        .filter((a) => a.autor === u.nome)
+        .reduce((s, a) => s + a.minutos, 0),
+      audiencias: audienciasPeriodo.filter((e) => e.advogado === u.nome).length,
+    };
+  });
+  const recebido = lancamentosPeriodo
+    .filter((l) => l.tipo === "Receber" && l.situacao === "Pago")
+    .reduce((s, l) => s + l.valor, 0);
+  const pago = lancamentosPeriodo
+    .filter((l) => l.tipo === "Pagar" && l.situacao === "Pago")
+    .reduce((s, l) => s + l.valor, 0);
+  const fluxo = fluxoDeCaixa(lancamentosPeriodo);
+
+  const tabelas: Record<string, Omit<Tabela, "subtitulo">> = {
+    "Processos por área": {
+      titulo: "Processos por área",
+      colunas: [
+        { titulo: "Área", peso: 3 },
+        { titulo: "Processos", numero: true },
+      ],
+      linhas: [...porArea.map((a) => [a.area, a.total]), ["Total", processos.length]],
+    },
+    "Produtividade da equipe": {
+      titulo: "Produtividade da equipe",
+      colunas: [
+        { titulo: "Pessoa", peso: 3 },
+        { titulo: "Concluídas", numero: true },
+        { titulo: "Em aberto", numero: true },
+        { titulo: "Horas" },
+        { titulo: "Audiências", numero: true },
+      ],
+      linhas: produtividade.map((p) => [
+        p.nome,
+        p.concluidas,
+        p.abertas,
+        minToH(p.minutos),
+        p.audiencias,
+      ]),
+    },
+    Audiências: {
+      titulo: "Audiências do período",
+      colunas: [
+        { titulo: "Data", peso: 1.2 },
+        { titulo: "Hora", peso: 0.8 },
+        { titulo: "Título", peso: 4 },
+        { titulo: "Advogado", peso: 2 },
+        { titulo: "Local", peso: 2 },
+      ],
+      linhas: audienciasPeriodo.map((e) => [fmtDMY(e.data), e.hora, e.titulo, e.advogado, e.local]),
+    },
+    "Relatório financeiro": {
+      titulo: "Relatório financeiro",
+      colunas: [
+        { titulo: "Mês", peso: 2 },
+        { titulo: "Entradas", peso: 1.5, moeda: true },
+        { titulo: "Saídas", peso: 1.5, moeda: true },
+        { titulo: "Saldo", peso: 1.5, moeda: true },
+      ],
+      linhas: [
+        ...fluxo.map((m) => [m.mes, m.entradas, m.saidas, m.entradas - m.saidas]),
+        ["Total pago no período", recebido, pago, recebido - pago],
+      ],
+    },
+  };
+
   const exportar = (nome: string, formato: "PDF" | "Excel") => {
+    const base = tabelas[nome];
+    if (!base) return;
+    const gerado = new Date().toLocaleString("pt-BR");
+    const t: Tabela = { ...base, subtitulo: `Período: ${periodo} · Gerado em ${gerado}` };
+    try {
+      if (formato === "PDF")
+        baixar(
+          gerarPdf(t, `${t.titulo} — ${periodo}`),
+          "application/pdf",
+          nomeArquivo(`${t.titulo} ${periodo}`, "pdf"),
+        );
+      else
+        baixar(
+          gerarXlsx(t),
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          nomeArquivo(`${t.titulo} ${periodo}`, "xlsx"),
+        );
+    } catch {
+      toast.error(`Não foi possível gerar o arquivo ${formato}.`);
+      return;
+    }
     registrar("Exportou", "Relatórios", `Exportou ${nome} (${formato}) — ${periodo}`);
-    toast.success(`${nome} exportado em ${formato} (simulado)`);
+    toast.success(`${nome} exportado em ${formato}`);
   };
 
   const Exportar = ({ nome }: { nome: string }) => (
@@ -75,41 +196,17 @@ function RelatoriosPage() {
     </>
   );
 
-  const porArea = AREAS.map((a) => ({
-    area: a,
-    total: processos.filter((p) => p.area === a).length,
-  }));
-  const produtividade = usuarios.map((u) => {
-    const ts = tarefas.filter((t) => t.responsavel === u.nome);
-    return {
-      nome: u.nome,
-      concluidas: ts.filter((t) => t.coluna === "Concluído").length,
-      abertas: ts.filter((t) => t.coluna !== "Concluído").length,
-      minutos: tarefas
-        .flatMap((t) => t.apontamentos)
-        .filter((a) => a.autor === u.nome)
-        .reduce((s, a) => s + a.minutos, 0),
-      audiencias: eventos.filter((e) => e.tipo === "Audiência" && e.advogado === u.nome).length,
-    };
-  });
-  const recebido = lancamentos
-    .filter((l) => l.tipo === "Receber" && l.situacao === "Pago")
-    .reduce((s, l) => s + l.valor, 0);
-  const pago = lancamentos
-    .filter((l) => l.tipo === "Pagar" && l.situacao === "Pago")
-    .reduce((s, l) => s + l.valor, 0);
-
   return (
     <AppShell title="Relatórios" subtitle="gerenciais e financeiros, com exportação em PDF e Excel">
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <Field label="Período" className="w-48">
           <select
             className={selectCls}
-            value={periodo}
-            onChange={(e) => setPeriodo(e.target.value)}
+            value={nomePeriodo}
+            onChange={(e) => setNomePeriodo(e.target.value)}
           >
             {periodos.map((p) => (
-              <option key={p}>{p}</option>
+              <option key={p.nome}>{p.nome}</option>
             ))}
           </select>
         </Field>
@@ -123,19 +220,21 @@ function RelatoriosPage() {
         />
         <Stat
           label="Tarefas concluídas"
-          value={tarefas.filter((t) => t.coluna === "Concluído").length}
-          note={`de ${tarefas.length} no período`}
+          value={tarefasPeriodo.filter((t) => t.coluna === "Concluído").length}
+          note={`de ${tarefasPeriodo.length} com prazo no período`}
           delay={60}
         />
         <Stat
           label="Audiências"
-          value={eventos.filter((e) => e.tipo === "Audiência").length}
+          value={audienciasPeriodo.length}
           note="agendadas no período"
           delay={120}
         />
         <Stat
           label="Horas apontadas"
-          value={minToH(tarefas.flatMap((t) => t.apontamentos).reduce((s, a) => s + a.minutos, 0))}
+          value={minToH(
+            tarefasPeriodo.flatMap((t) => t.apontamentos).reduce((s, a) => s + a.minutos, 0),
+          )}
           note="timesheet da equipe"
           delay={180}
         />
@@ -212,18 +311,20 @@ function RelatoriosPage() {
 
         <Panel title="Audiências do período" action={<Exportar nome="Audiências" />} delay={120}>
           <div className="divide-y divide-border">
-            {eventos
-              .filter((e) => e.tipo === "Audiência")
-              .sort((a, b) => a.data.localeCompare(b.data))
-              .map((e) => (
-                <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    {e.data.split("-").reverse().slice(0, 2).join("/")}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{e.titulo}</span>
-                  <span className="text-xs text-muted-foreground">{e.advogado}</span>
-                </div>
-              ))}
+            {audienciasPeriodo.length === 0 && (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                Nenhuma audiência no período.
+              </div>
+            )}
+            {audienciasPeriodo.map((e) => (
+              <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {e.data.split("-").reverse().slice(0, 2).join("/")}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{e.titulo}</span>
+                <span className="text-xs text-muted-foreground">{e.advogado}</span>
+              </div>
+            ))}
           </div>
         </Panel>
 
@@ -261,7 +362,7 @@ function RelatoriosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fluxoDeCaixa(lancamentos).map((m) => (
+                {fluxo.map((m) => (
                   <TableRow key={m.mes}>
                     <TableCell className="text-xs">{m.mes}</TableCell>
                     <TableCell className="text-right font-mono text-xs">

@@ -2,6 +2,8 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { config } from "../config";
+import { ErroApi } from "../http/erros";
+import { log } from "../log";
 
 export type Armazenamento = {
   salvar(chave: string, dados: Uint8Array, mime: string): Promise<void>;
@@ -20,7 +22,16 @@ function conferir(chave: string) {
   return chave;
 }
 
+function indisponivel(motivo: string, detalhe?: unknown) {
+  log.error("falha no armazenamento de arquivos", { motivo, detalhe });
+  return new ErroApi(503, "INDISPONIVEL", `Armazenamento de arquivos indisponível: ${motivo}`);
+}
+
 function local(): Armazenamento {
+  if (process.env["VERCEL"])
+    throw indisponivel(
+      "configure STORAGE_DRIVER=supabase na Vercel (o disco do servidor não é gravável).",
+    );
   const base = path.resolve(config().STORAGE_LOCAL_DIR);
   const caminho = (chave: string) => {
     const p = path.resolve(base, conferir(chave));
@@ -30,8 +41,12 @@ function local(): Armazenamento {
   return {
     async salvar(chave, dados) {
       const p = caminho(chave);
-      await mkdir(path.dirname(p), { recursive: true, mode: 0o700 });
-      await writeFile(p, dados, { flag: "wx", mode: 0o600 });
+      try {
+        await mkdir(path.dirname(p), { recursive: true, mode: 0o700 });
+        await writeFile(p, dados, { flag: "wx", mode: 0o600 });
+      } catch (e) {
+        throw indisponivel("não foi possível gravar no disco do servidor.", e);
+      }
     },
     async ler(chave) {
       return new Uint8Array(await readFile(caminho(chave)));
@@ -44,44 +59,86 @@ function local(): Armazenamento {
 
 function supabase(): Armazenamento {
   const c = config();
-  const base = `${c.SUPABASE_URL!.replace(/\/$/, "")}/storage/v1/object`;
+  const raiz = `${c.SUPABASE_URL!.replace(/\/$/, "")}/storage/v1`;
+  const base = `${raiz}/object`;
   const bucket = c.SUPABASE_STORAGE_BUCKET;
-  const auth = {
-    Authorization: `Bearer ${c.SUPABASE_SERVICE_ROLE_KEY!}`,
-    apikey: c.SUPABASE_SERVICE_ROLE_KEY!,
-  };
+  const chaveApi = c.SUPABASE_SERVICE_ROLE_KEY!.trim();
+  const auth = { Authorization: `Bearer ${chaveApi}`, apikey: chaveApi };
   const sinal = () => AbortSignal.timeout(20_000);
+  const chamar = async (url: string, init: RequestInit) => {
+    try {
+      return await fetch(url, { ...init, signal: sinal() });
+    } catch (e) {
+      throw indisponivel("sem resposta do Supabase Storage. Tente novamente.", e);
+    }
+  };
+  const falha = async (r: Response, acao: string) => {
+    const texto = await r.text().catch(() => "");
+    if (r.status === 401 || r.status === 403 || /jws|jwt|signature|unauthorized/i.test(texto))
+      return indisponivel(
+        "a chave SUPABASE_SERVICE_ROLE_KEY foi recusada pelo Supabase. Confira a variável na Vercel.",
+        { acao, status: r.status, texto },
+      );
+    if (/bucket not found/i.test(texto))
+      return indisponivel(`o bucket "${bucket}" não existe no Supabase Storage.`, {
+        acao,
+        status: r.status,
+        texto,
+      });
+    return indisponivel(`erro ${r.status} ao ${acao}.`, { acao, status: r.status, texto });
+  };
+  const criarBucket = async () => {
+    const r = await chamar(`${raiz}/bucket`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: bucket, name: bucket, public: false }),
+    });
+    if (!r.ok && r.status !== 409) {
+      const texto = await r.text().catch(() => "");
+      if (!/already exists/i.test(texto))
+        log.error("falha ao criar bucket", { status: r.status, texto });
+    }
+  };
+  const enviar = (chave: string, dados: Uint8Array, mime: string) =>
+    chamar(`${base}/${bucket}/${conferir(chave)}`, {
+      method: "POST",
+      headers: {
+        ...auth,
+        "Content-Type": mime,
+        "x-upsert": "false",
+        "Cache-Control": "no-store",
+      },
+      body: Buffer.from(dados),
+    });
   return {
     async salvar(chave, dados, mime) {
-      const r = await fetch(`${base}/${bucket}/${conferir(chave)}`, {
-        method: "POST",
-        headers: {
-          ...auth,
-          "Content-Type": mime,
-          "x-upsert": "false",
-          "Cache-Control": "no-store",
-        },
-        body: Buffer.from(dados),
-        signal: sinal(),
-      });
-      if (!r.ok) throw new Error(`falha ao enviar arquivo ao storage (${r.status})`);
+      let r = await enviar(chave, dados, mime);
+      if (!r.ok) {
+        const texto = await r
+          .clone()
+          .text()
+          .catch(() => "");
+        if (/bucket not found/i.test(texto)) {
+          await criarBucket();
+          r = await enviar(chave, dados, mime);
+        }
+      }
+      if (!r.ok) throw await falha(r, "enviar o arquivo");
     },
     async ler(chave) {
-      const r = await fetch(`${base}/authenticated/${bucket}/${conferir(chave)}`, {
+      const r = await chamar(`${base}/authenticated/${bucket}/${conferir(chave)}`, {
         headers: auth,
-        signal: sinal(),
       });
-      if (!r.ok) throw new Error(`falha ao ler arquivo do storage (${r.status})`);
+      if (!r.ok) throw await falha(r, "ler o arquivo");
       return new Uint8Array(await r.arrayBuffer());
     },
     async remover(chave) {
-      const r = await fetch(`${base}/${bucket}`, {
+      const r = await chamar(`${base}/${bucket}`, {
         method: "DELETE",
         headers: { ...auth, "Content-Type": "application/json" },
         body: JSON.stringify({ prefixes: [conferir(chave)] }),
-        signal: sinal(),
       });
-      if (!r.ok) throw new Error(`falha ao remover arquivo do storage (${r.status})`);
+      if (!r.ok) throw await falha(r, "remover o arquivo");
     },
   };
 }

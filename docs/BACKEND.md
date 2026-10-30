@@ -77,6 +77,8 @@ no primeiro acesso. Não existe usuário ou senha padrão.
 3. Para os documentos, crie no Storage um bucket **privado** chamado `documentos` (ou o nome em
    `SUPABASE_STORAGE_BUCKET`). Não crie políticas de Storage para `anon`/`authenticated`: o backend
    acessa o bucket com a service role e libera o download só depois de autorizar o usuário.
+   Se o bucket não existir, o primeiro upload tenta criá-lo como privado. Falhas do Storage (chave
+   recusada, bucket ausente, sem resposta) retornam 503 com o motivo, em vez de erro interno genérico.
 4. Migrations versionadas em `prisma/migrations`:
    - `..._inicial`: tabelas, chaves, índices e FKs `RESTRICT` (sem cascata em registros jurídicos);
    - `..._seguranca`: CHECKs dos domínios, triggers de "somente inclusão" e RLS (seção 9).
@@ -272,7 +274,7 @@ path traversal, tamanho, versões).
 
 ## 14. Limitações conhecidas e pendências
 
-- **Contexto**: não há Supabase Auth, serviço de e-mail, antivírus nem integração de assinatura eletrônica. As exportações em PDF/Excel e o envio para assinatura continuam simulados na interface (e indicados como tal).
+- **Contexto**: não há Supabase Auth, serviço de e-mail, antivírus nem integração de assinatura eletrônica. As exportações de relatórios em PDF e Excel (.xlsx) são geradas no navegador (`src/lib/exportar.ts`), respeitando o período selecionado. O envio para assinatura continua simulado na interface (e indicado como tal).
 - **Rate limit geral em memória**: vale por instância; em serverless, cada instância tem o seu. O login usa o banco e vale globalmente.
 - **Bloqueio de conta**: 5 erros por e-mail bloqueiam aquele e-mail por 15 minutos, o que permite a um atacante atrapalhar o login de alguém (troca consciente contra força bruta).
 - **Upload**: até ~4 MB por causa do limite de corpo da Vercel. Arquivos maiores exigiriam URL assinada de upload direto ao Storage, com validação depois do envio.

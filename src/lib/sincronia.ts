@@ -158,5 +158,7 @@ export function useColecao<T extends Item>(cfg: ConfigColecao<T>) {
     [cfg.caminho, substituirLocal],
   );
 
-  return { lista, definir, carregar, limpar, substituirLocal, gravar, criar };
+  const aguardar = useCallback(() => fila.current, []);
+
+  return { lista, definir, carregar, limpar, substituirLocal, gravar, criar, aguardar };
 }

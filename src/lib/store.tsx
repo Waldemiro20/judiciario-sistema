@@ -30,7 +30,16 @@ import {
   type Tarefa,
   type Usuario,
 } from "./data";
-import { api, ErroApi, listarTudo, mensagemDe, novaChave, quandoPerderSessao } from "./api";
+import {
+  api,
+  ErroApi,
+  LIMITE_UPLOAD,
+  listarTudo,
+  mensagemDe,
+  MSG_LIMITE_UPLOAD,
+  novaChave,
+  quandoPerderSessao,
+} from "./api";
 import { useColecao } from "./sincronia";
 
 type Theme = "light" | "dark";
@@ -428,6 +437,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const enviarDocumento = useCallback(async (arquivo: File, pasta: string, processo: string) => {
+    if (arquivo.size > LIMITE_UPLOAD) {
+      toast.error(`${arquivo.name}: ${MSG_LIMITE_UPLOAD}`);
+      return null;
+    }
     const form = new FormData();
     form.set("arquivo", arquivo);
     form.set("pasta", pasta);
@@ -473,9 +486,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const anexarDocCliente = useCallback(async (clienteId: string, docId: string, arquivo: File) => {
+    if (arquivo.size > LIMITE_UPLOAD) {
+      toast.error(`${arquivo.name}: ${MSG_LIMITE_UPLOAD}`);
+      return false;
+    }
     const form = new FormData();
     form.set("arquivo", arquivo);
     try {
+      await colecoes.current.clientes.aguardar();
       const c = await api<Cliente>(
         "POST",
         `/api/clientes/${clienteId}/documentos/${docId}/arquivo`,
