@@ -26,6 +26,7 @@ import {
 import {
   agoraCarimbo,
   docsPendentes,
+  ESTADOS_CIVIS,
   uid,
   type Cliente,
   type Contato,
@@ -197,6 +198,8 @@ function NovoClienteDialog({
   const [nome, setNome] = useState("");
   const [doc1, setDoc1] = useState("");
   const [doc2, setDoc2] = useState("");
+  const [estadoCivil, setEstadoCivil] = useState("");
+  const [profissao, setProfissao] = useState("");
   const [contatos, setContatos] = useState<Contato[]>([{ id: uid(), tipo: "Celular", valor: "" }]);
   const [enderecos, setEnderecos] = useState<Endereco[]>([
     { id: uid(), rotulo: "Principal", logradouro: "", cidade: "", cep: "" },
@@ -207,6 +210,8 @@ function NovoClienteDialog({
     setNome("");
     setDoc1("");
     setDoc2("");
+    setEstadoCivil("");
+    setProfissao("");
     setContatos([{ id: uid(), tipo: "Celular", valor: "" }]);
     setEnderecos([{ id: uid(), rotulo: "Principal", logradouro: "", cidade: "", cep: "" }]);
   };
@@ -233,6 +238,8 @@ function NovoClienteDialog({
       tipo,
       documento: doc1.trim(),
       documento2: doc2.trim(),
+      estadoCivil: pf ? estadoCivil : "",
+      profissao: pf ? profissao.trim() : "",
       desde: agoraCarimbo().data.slice(3),
       status: "Ativo",
       contatos: contatos.filter((c) => c.valor.trim()),
@@ -300,6 +307,29 @@ function NovoClienteDialog({
               onChange={(e) => setDoc2(e.target.value)}
             />
           </Field>
+          {pf && (
+            <>
+              <Field label="Estado civil">
+                <select
+                  className={selectCls}
+                  value={estadoCivil}
+                  onChange={(e) => setEstadoCivil(e.target.value)}
+                >
+                  <option value="">Não informado</option>
+                  {ESTADOS_CIVIS.map((x) => (
+                    <option key={x}>{x}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Profissão">
+                <input
+                  className={inputCls}
+                  value={profissao}
+                  onChange={(e) => setProfissao(e.target.value)}
+                />
+              </Field>
+            </>
+          )}
         </div>
 
         <div>

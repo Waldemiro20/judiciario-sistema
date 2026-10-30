@@ -113,6 +113,8 @@ model Cliente {
   tipo           String
   documento      String
   documento2     String    @default("")
+  estadoCivil    String    @default("")
+  profissao      String    @default("")
   desde          String
   status         String
   contatos       Json      @default("[]")

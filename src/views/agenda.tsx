@@ -10,6 +10,7 @@ import {
   Plus,
   Repeat,
   Trash2,
+  User,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -40,7 +41,9 @@ function inicioSemana(d: Date) {
 }
 
 function AgendaPage() {
-  const { eventos, setEventos, usuarios, pode, registrar } = useApp();
+  const { eventos, setEventos, usuarios, processos, pode, registrar } = useApp();
+  const clienteDe = (e: Evento) =>
+    e.cliente || (e.processo && processos.find((p) => p.numero === e.processo)?.cliente) || "";
   const [vista, setVista] = useState<Vista>("Mês");
   const [ref, setRef] = useState(parseISO(HOJE));
   const [advogado, setAdvogado] = useState("Todos");
@@ -354,7 +357,9 @@ function AgendaPage() {
                           <div className="truncate font-semibold">{o.evento.titulo}</div>
                           {vista === "Dia" && (
                             <div className="truncate opacity-80">
-                              {o.evento.local} · {o.evento.advogado}
+                              {[clienteDe(o.evento), o.evento.local, o.evento.advogado]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </div>
                           )}
                         </button>
@@ -402,6 +407,15 @@ function AgendaPage() {
               </DialogDescription>
             </DialogHeader>
             <dl className="space-y-2 text-sm">
+              {clienteDe(detalhe.evento) && (
+                <div className="flex items-start gap-2">
+                  <User className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <span>
+                    <span className="text-muted-foreground">Cliente: </span>
+                    <span className="font-medium">{clienteDe(detalhe.evento)}</span>
+                  </span>
+                </div>
+              )}
               <div className="flex items-start gap-2">
                 <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <span>{detalhe.evento.local}</span>

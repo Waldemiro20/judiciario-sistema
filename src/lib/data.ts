@@ -29,6 +29,14 @@ export const VINCULOS = ["Processo", "Cliente", "Interno"] as const;
 export const TIPOS_EVENTO = ["Audiência", "Reunião", "Prazo"] as const;
 export const RECORRENCIAS = ["Não repete", "Diária", "Semanal", "Mensal"] as const;
 export const TIPOS_CLIENTE = ["Pessoa Física", "Pessoa Jurídica"] as const;
+export const ESTADOS_CIVIS = [
+  "Solteiro(a)",
+  "Casado(a)",
+  "União estável",
+  "Separado(a)",
+  "Divorciado(a)",
+  "Viúvo(a)",
+] as const;
 export const STATUS_CLIENTE = ["Ativo", "Inativo"] as const;
 export const TIPOS_LANCAMENTO = ["Receber", "Pagar"] as const;
 export const MODELOS_COBRANCA = ["Ad Exitum", "Partido (Mensal)", "Por Hora", "Avulso"] as const;
@@ -157,6 +165,8 @@ export type Cliente = {
   tipo: (typeof TIPOS_CLIENTE)[number];
   documento: string;
   documento2: string;
+  estadoCivil?: string;
+  profissao?: string;
   desde: string;
   status: (typeof STATUS_CLIENTE)[number];
   contatos: Contato[];

@@ -219,6 +219,38 @@ describe("autorização", () => {
     ).toBe(1);
   });
 
+  it("cliente guarda estado civil e profissão", async () => {
+    const outro = await cenario();
+    const criado = await chamar(clientes.POST, {
+      cookie: outro.cookieAdvogado,
+      corpo: {
+        nome: `Maria ${Math.random()}`,
+        tipo: "Pessoa Física",
+        documento: "000.000.000-00",
+        status: "Ativo",
+        estadoCivil: "Casado(a)",
+        profissao: "Professora",
+      },
+    });
+    expect(criado.status).toBe(201);
+    expect(criado.json).toMatchObject({
+      estadoCivil: "Casado(a)",
+      profissao: "Professora",
+    });
+    const editado = await chamar(cliente.PATCH, {
+      metodo: "PATCH",
+      cookie: outro.cookieAdvogado,
+      params: { id: criado.json.id },
+      corpo: {
+        versao: criado.json.versao,
+        estadoCivil: "Divorciado(a)",
+        profissao: "Advogada",
+      },
+    });
+    expect(editado.status).toBe(200);
+    expect(editado.json).toMatchObject({ estadoCivil: "Divorciado(a)", profissao: "Advogada" });
+  });
+
   it("só o admin exclui cliente, e não quando há processo vinculado", async () => {
     const outro = await cenario();
     const livre = await novoCliente(outro.escritorioId);

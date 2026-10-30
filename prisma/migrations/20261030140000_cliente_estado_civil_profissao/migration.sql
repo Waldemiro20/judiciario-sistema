@@ -1,0 +1,2 @@
+ALTER TABLE "Cliente" ADD COLUMN "estadoCivil" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Cliente" ADD COLUMN "profissao" TEXT NOT NULL DEFAULT '';

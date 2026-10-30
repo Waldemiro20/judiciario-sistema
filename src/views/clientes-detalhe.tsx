@@ -83,6 +83,7 @@ import {
   brl,
   diasAte,
   docsPendentes,
+  ESTADOS_CIVIS,
   fmtDMY,
   HOJE,
   recebidoDe,
@@ -244,7 +245,12 @@ function ClientePage() {
         <TabsContent value="cadastro">
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
             <div className="space-y-5 lg:col-span-1">
-              <CardCadastro c={c} nProcessos={vinculados.length} />
+              <CardCadastro
+                c={c}
+                nProcessos={vinculados.length}
+                podeEditar={podeEditar}
+                alterar={alterar}
+              />
               <CardContatos c={c} podeEditar={podeEditar} alterar={alterar} />
               <CardEnderecos c={c} />
             </div>
@@ -322,8 +328,31 @@ function ClientePage() {
 
 type Alterar = (fn: (x: Cliente) => Cliente) => void;
 
-function CardCadastro({ c, nProcessos }: { c: Cliente; nProcessos: number }) {
+function CardCadastro({
+  c,
+  nProcessos,
+  podeEditar,
+  alterar,
+}: {
+  c: Cliente;
+  nProcessos: number;
+  podeEditar: boolean;
+  alterar: Alterar;
+}) {
   const pf = c.tipo === "Pessoa Física";
+  const [editando, setEditando] = useState(false);
+  const [estadoCivil, setEstadoCivil] = useState(c.estadoCivil ?? "");
+  const [profissao, setProfissao] = useState(c.profissao ?? "");
+  const abrirEdicao = () => {
+    setEstadoCivil(c.estadoCivil ?? "");
+    setProfissao(c.profissao ?? "");
+    setEditando(true);
+  };
+  const salvar = () => {
+    alterar((x) => ({ ...x, estadoCivil, profissao: profissao.trim() }));
+    setEditando(false);
+    toast.success("Dados atualizados");
+  };
   return (
     <Panel>
       <div className="p-5">
@@ -351,6 +380,64 @@ function CardCadastro({ c, nProcessos }: { c: Cliente; nProcessos: number }) {
             </dt>
             <dd className="font-mono text-xs">{c.documento2 || "—"}</dd>
           </div>
+          {pf && !editando && (
+            <>
+              <div>
+                <dt className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  Estado civil
+                  {podeEditar && (
+                    <button
+                      type="button"
+                      aria-label="Editar estado civil e profissão"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={abrirEdicao}
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
+                </dt>
+                <dd className="text-xs">{c.estadoCivil || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[11px] text-muted-foreground">Profissão</dt>
+                <dd className="text-xs">{c.profissao || "—"}</dd>
+              </div>
+            </>
+          )}
+          {pf && editando && (
+            <div className="col-span-2 space-y-2 rounded-lg border border-border p-3">
+              <Field label="Estado civil">
+                <select
+                  className={selectCls}
+                  value={estadoCivil}
+                  onChange={(e) => setEstadoCivil(e.target.value)}
+                >
+                  <option value="">Não informado</option>
+                  {ESTADOS_CIVIS.map((x) => (
+                    <option key={x}>{x}</option>
+                  ))}
+                  {estadoCivil && !(ESTADOS_CIVIS as readonly string[]).includes(estadoCivil) && (
+                    <option>{estadoCivil}</option>
+                  )}
+                </select>
+              </Field>
+              <Field label="Profissão">
+                <input
+                  className={inputCls}
+                  value={profissao}
+                  onChange={(e) => setProfissao(e.target.value)}
+                />
+              </Field>
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setEditando(false)}>
+                  Cancelar
+                </Button>
+                <Button size="sm" onClick={salvar}>
+                  <Save className="size-3.5" /> Salvar
+                </Button>
+              </div>
+            </div>
+          )}
           <div>
             <dt className="text-[11px] text-muted-foreground">Cliente desde</dt>
             <dd className="font-mono text-xs">{c.desde}</dd>

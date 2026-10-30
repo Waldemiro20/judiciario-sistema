@@ -194,8 +194,8 @@ function AudienciasPage() {
                       <span className="text-muted-foreground">Presencial</span>
                     )}
                   </Info>
-                  <Info icon={Gavel} label="Magistrado">
-                    {atual.juiz ?? "—"}
+                  <Info icon={Users} label="Cliente que deve comparecer">
+                    {atual.cliente || "—"}
                   </Info>
                   <Info icon={User} label="Advogado responsável">
                     <span className="flex items-center gap-2">
@@ -225,10 +225,10 @@ function AudienciasPage() {
                       )}
                     </div>
                     <div className="rounded-xl border border-border p-3">
-                      <div className="text-[11px] text-muted-foreground">
-                        Cliente que deve comparecer
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Gavel className="size-3.5" /> Magistrado
                       </div>
-                      <div className="mt-0.5 text-sm font-medium">{atual.cliente ?? "—"}</div>
+                      <div className="mt-0.5 text-sm font-medium">{atual.juiz || "—"}</div>
                     </div>
                     <div className="rounded-xl border border-border p-3 sm:col-span-2">
                       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

@@ -254,18 +254,18 @@ export function EventoDialog({
           </Field>
           {ehAudiencia && (
             <>
-              <Field label="Magistrado responsável" className="sm:col-span-3">
-                <input
-                  className={inputCls}
-                  value={f.juiz}
-                  onChange={(e) => set("juiz", e.target.value)}
-                />
-              </Field>
               <Field label="Cliente que deve comparecer" className="sm:col-span-3">
                 <input
                   className={inputCls}
                   value={f.cliente}
                   onChange={(e) => set("cliente", e.target.value)}
+                />
+              </Field>
+              <Field label="Magistrado responsável" className="sm:col-span-3">
+                <input
+                  className={inputCls}
+                  value={f.juiz}
+                  onChange={(e) => set("juiz", e.target.value)}
                 />
               </Field>
               <Field label="Testemunhas" className="sm:col-span-6">
