@@ -32,7 +32,7 @@ export async function idsUsuarios(tx: Tx, ctx: Contexto, nomes: string[], campo 
 
 export async function idCliente(tx: Tx, ctx: Contexto, nome: string, campo = "cliente") {
   const c = await tx.cliente.findFirst({
-    where: { escritorioId: ctx.usuario.escritorioId, nome },
+    where: { escritorioId: ctx.usuario.escritorioId, nome, excluidoEm: null },
     select: { id: true },
   });
   if (!c) throw naoEncontradoCampo(campo, `Cliente "${nome}" não encontrado.`);

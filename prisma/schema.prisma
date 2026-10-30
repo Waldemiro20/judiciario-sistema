@@ -120,6 +120,7 @@ model Cliente {
   descricaoCaso  String?
   descricaoCasoEm DateTime? @db.Timestamptz(3)
   versao         Int       @default(1)
+  excluidoEm     DateTime? @db.Timestamptz(3)
   criadoEm       DateTime  @default(now()) @db.Timestamptz(3)
   atualizadoEm   DateTime  @updatedAt @db.Timestamptz(3)
 
@@ -132,8 +133,8 @@ model Cliente {
   lancamentos Lancamento[]
   contratos   Contrato[]
 
-  @@unique([escritorioId, nome])
-  @@index([escritorioId])
+  @@index([escritorioId, nome])
+  @@index([escritorioId, excluidoEm])
 }
 
 model ClienteHistorico {

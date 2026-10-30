@@ -103,11 +103,23 @@ function ClientePage() {
   const busca = useSearchParams().get("aba");
   const aba: Aba = ABAS.includes(busca as Aba) ? (busca as Aba) : "cadastro";
   const navigate = useNavigate();
-  const { carregando, clientes, setClientes, processos, tarefas, lancamentos, contratos, pode } =
-    useApp();
+  const {
+    carregando,
+    clientes,
+    setClientes,
+    processos,
+    tarefas,
+    lancamentos,
+    contratos,
+    pode,
+    isAdmin,
+    excluirCliente,
+  } = useApp();
   const c = clientes.find((x) => x.id === id);
   const [tarefaAberta, setTarefaAberta] = useState<string | null>(null);
   const [criarTarefa, setCriarTarefa] = useState(false);
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+  const [excluindoCliente, setExcluindoCliente] = useState(false);
 
   const tarefasCliente = useMemo(
     () => tarefas.filter((t) => t.clienteId === id).sort(ordemTarefas),
@@ -142,12 +154,60 @@ function ClientePage() {
 
   return (
     <AppShell title={c.nome} subtitle={`${c.tipo} · ${c.documento}`}>
-      <Link
-        to="/clientes"
-        className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link
+          to="/clientes"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" /> Clientes
+        </Link>
+        {isAdmin && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-[var(--critical)] hover:bg-[var(--critical-soft)] hover:text-[var(--critical)]"
+            onClick={() => setConfirmarExclusao(true)}
+          >
+            <Trash2 className="size-3.5" /> Excluir cliente
+          </Button>
+        )}
+      </div>
+
+      <AlertDialog
+        open={confirmarExclusao}
+        onOpenChange={(o) => !excluindoCliente && setConfirmarExclusao(o)}
       >
-        <ArrowLeft className="size-3.5" /> Clientes
-      </Link>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="text-foreground">{c.nome}</strong> será removido da lista de
+              clientes. Clientes com processos, contratos, tarefas, eventos ou lançamentos
+              vinculados não podem ser excluídos. A exclusão fica registrada na auditoria.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoCliente}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={excluindoCliente}
+              className="bg-[var(--critical)] text-white hover:bg-[var(--critical)]/90"
+              onClick={async (e) => {
+                e.preventDefault();
+                setExcluindoCliente(true);
+                const ok = await excluirCliente(c.id);
+                setExcluindoCliente(false);
+                setConfirmarExclusao(false);
+                if (ok) {
+                  toast.success("Cliente excluído", { description: c.nome });
+                  navigate({ to: "/clientes" });
+                }
+              }}
+            >
+              {excluindoCliente ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Tabs
         value={aba === "financeiro" && !verFinanceiro ? "cadastro" : aba}

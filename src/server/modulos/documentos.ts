@@ -267,7 +267,11 @@ export async function anexarDocPessoal(
   arquivo: ArquivoValidado,
 ) {
   const doc = await db().docPessoal.findFirst({
-    where: { id: docId, clienteId, cliente: { escritorioId: ctx.usuario.escritorioId } },
+    where: {
+      id: docId,
+      clienteId,
+      cliente: { escritorioId: ctx.usuario.escritorioId, excluidoEm: null },
+    },
     select: { id: true, nome: true, storageKey: true, cliente: { select: { nome: true } } },
   });
   if (!doc) throw erro.naoEncontrado();
@@ -317,7 +321,11 @@ export async function anexarDocPessoal(
 
 export async function baixarDocPessoal(ctx: Contexto, clienteId: string, docId: string) {
   const doc = await db().docPessoal.findFirst({
-    where: { id: docId, clienteId, cliente: { escritorioId: ctx.usuario.escritorioId } },
+    where: {
+      id: docId,
+      clienteId,
+      cliente: { escritorioId: ctx.usuario.escritorioId, excluidoEm: null },
+    },
     select: {
       id: true,
       nome: true,

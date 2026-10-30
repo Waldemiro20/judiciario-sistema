@@ -88,7 +88,7 @@ const visivel = (ctx: Contexto, nivel: "ver" | "editar" = "ver"): Prisma.EventoW
 async function clienteId(tx: Tx, ctx: Contexto, nome: string | undefined) {
   if (!nome) return null;
   const c = await tx.cliente.findFirst({
-    where: { escritorioId: ctx.usuario.escritorioId, nome },
+    where: { escritorioId: ctx.usuario.escritorioId, nome, excluidoEm: null },
     select: { id: true },
   });
   return c?.id ?? null;

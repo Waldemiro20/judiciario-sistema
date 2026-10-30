@@ -99,7 +99,10 @@ function paraFront(c: Linha): Cliente {
   };
 }
 
-const doEscritorio = (ctx: Contexto) => ({ escritorioId: ctx.usuario.escritorioId });
+const doEscritorio = (ctx: Contexto) => ({
+  escritorioId: ctx.usuario.escritorioId,
+  excluidoEm: null,
+});
 
 export async function listarClientes(ctx: Contexto, p: Paginacao) {
   const where = doEscritorio(ctx);
@@ -255,4 +258,54 @@ export async function atualizarCliente(
     });
   });
   return obterCliente(ctx, id);
+}
+
+export async function excluirCliente(ctx: Contexto, id: string) {
+  if (ctx.usuario.role !== "admin")
+    throw erro.proibido("Só o Advogado Administrador pode excluir clientes.");
+  const alvo = await db().cliente.findFirst({
+    where: { id, ...doEscritorio(ctx) },
+    select: { id: true, nome: true },
+  });
+  if (!alvo) throw erro.naoEncontrado();
+  const ativo = { clienteId: id, excluidoEm: null };
+  const [processos, contratos, tarefas, eventos, lancamentos] = await Promise.all([
+    db().processo.count({ where: { clienteId: id } }),
+    db().contrato.count({ where: { clienteId: id } }),
+    db().tarefa.count({ where: ativo }),
+    db().evento.count({ where: ativo }),
+    db().lancamento.count({ where: ativo }),
+  ]);
+  const vinculos = [
+    processos && `${processos} processo(s)`,
+    contratos && `${contratos} contrato(s)`,
+    tarefas && `${tarefas} tarefa(s)`,
+    eventos && `${eventos} evento(s) da agenda`,
+    lancamentos && `${lancamentos} lançamento(s) financeiro(s)`,
+  ].filter(Boolean);
+  if (vinculos.length)
+    throw erro.conflito(
+      `${alvo.nome} tem ${vinculos.join(", ")}. Exclua ou transfira esses registros antes de excluir o cliente.`,
+    );
+  await db().$transaction(async (tx) => {
+    const r = await tx.cliente.updateMany({
+      where: { id, ...doEscritorio(ctx) },
+      data: { excluidoEm: new Date(), versao: { increment: 1 } },
+    });
+    if (r.count === 0) throw erro.naoEncontrado();
+    await tx.clienteHistorico.create({
+      data: {
+        clienteId: id,
+        texto: `Cliente excluído por ${ctx.usuario.nome}`,
+        autorId: ctx.usuario.id,
+      },
+    });
+    await ctx.auditarTx(tx, {
+      acao: "Excluiu",
+      modulo: "Clientes",
+      descricao: `Excluiu o cliente ${alvo.nome}`,
+      recursoTipo: "Cliente",
+      recursoId: id,
+    });
+  });
 }

@@ -128,6 +128,7 @@ type AppState = {
   atualizarUsuario: (id: string, d: { role?: Role; ativo?: boolean }) => Promise<boolean>;
   redefinirSenhaUsuario: (id: string, senha?: string) => Promise<string | null>;
   excluirUsuario: (id: string) => Promise<boolean>;
+  excluirCliente: (id: string) => Promise<boolean>;
   permissoes: MatrizPermissoes;
   alterarPermissao: (role: Role, modulo: Modulo, nivel: Permissao) => Promise<boolean>;
   logs: Log[];
@@ -549,6 +550,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const excluirCliente = useCallback(async (id: string) => {
+    try {
+      await colecoes.current.clientes.aguardar();
+      await api("DELETE", `/api/clientes/${id}`);
+      const c = colecoes.current.clientes;
+      c.gravar(c.lista.filter((x) => x.id !== id));
+      return true;
+    } catch (e) {
+      toast.error(mensagemDe(e));
+      return false;
+    }
+  }, []);
+
   const excluirUsuario = useCallback(async (id: string) => {
     try {
       await api("DELETE", `/api/usuarios/${id}`);
@@ -617,6 +631,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       atualizarUsuario,
       redefinirSenhaUsuario,
       excluirUsuario,
+      excluirCliente,
       permissoes,
       alterarPermissao,
       logs,
@@ -669,6 +684,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       atualizarUsuario,
       redefinirSenhaUsuario,
       excluirUsuario,
+      excluirCliente,
       permissoes,
       alterarPermissao,
       logs,

@@ -219,6 +219,55 @@ describe("autorização", () => {
     ).toBe(1);
   });
 
+  it("só o admin exclui cliente, e não quando há processo vinculado", async () => {
+    const outro = await cenario();
+    const livre = await novoCliente(outro.escritorioId);
+    for (const cookie of [outro.cookieAdvogado, outro.cookieEstagiario]) {
+      const negado = await chamar(cliente.DELETE, {
+        metodo: "DELETE",
+        cookie,
+        params: { id: livre.id },
+      });
+      expect(negado.status).toBe(403);
+    }
+    const excluir = await chamar(cliente.DELETE, {
+      metodo: "DELETE",
+      cookie: outro.cookieAdmin,
+      params: { id: livre.id },
+    });
+    expect(excluir.status).toBe(204);
+    const sumiu = await chamar(cliente.GET, {
+      cookie: outro.cookieAdmin,
+      params: { id: livre.id },
+    });
+    expect(sumiu.status).toBe(404);
+    const lista = await chamar(clientes.GET, { cookie: outro.cookieAdmin });
+    expect(lista.json.itens.some((x: { id: string }) => x.id === livre.id)).toBe(false);
+    const recriado = await chamar(clientes.POST, {
+      cookie: outro.cookieAdmin,
+      corpo: {
+        nome: livre.nome,
+        tipo: "Pessoa Física",
+        documento: "000.000.000-00",
+        status: "Ativo",
+      },
+    });
+    expect(recriado.status).toBe(201);
+
+    const comProcesso = await novoCliente(outro.escritorioId);
+    const criado = await chamar(processos.POST, {
+      cookie: outro.cookieAdvogado,
+      corpo: novoProcesso(outro, comProcesso.nome),
+    });
+    expect(criado.status).toBe(201);
+    const bloqueado = await chamar(cliente.DELETE, {
+      metodo: "DELETE",
+      cookie: outro.cookieAdmin,
+      params: { id: comProcesso.id },
+    });
+    expect(bloqueado.status).toBe(409);
+  });
+
   it("admin exclui usuário sem vínculos, mas não a si mesmo nem quem é responsável por processos", async () => {
     const outro = await cenario();
     const livre = await novoUsuario(outro.escritorioId, "estagiario");
